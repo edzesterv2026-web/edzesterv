@@ -145,7 +145,7 @@ function itemHTML(i) {
   const cls = ['it', e.k ? 'done' : '', rest ? 'rest' : '', openId === i.id ? 'open' : ''].join(' ');
   const feel = [1, 2, 3, 4, 5].map(n => `<button data-feel="${n}" class="${e.e === n ? 'on' : ''}">${n}</button>`).join('');
   return `<div class="${cls}" data-id="${i.id}">
-    <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '✓' : ''}</button>
+    <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.4l2.9 2.9 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</button>
     <div class="body" data-tog="${i.id}">
       ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : shortName(i))}</div>
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
@@ -160,7 +160,7 @@ function itemHTML(i) {
 function dayHTML(datum, its, label) {
   const t = todayStr();
   const d = parseD(datum);
-  const title = label || (NAPNEV[d.getDay()] + ', ' + fmtD(datum));
+  const title = label || (fmtD(datum) + ' – ' + NAPNEV[d.getDay()]);
   return `<div class="card day ${datum === t ? 'today' : ''}"><h3>${esc(title)}</h3>${its.map(itemHTML).join('')}</div>`;
 }
 
@@ -171,8 +171,8 @@ function renderMa() {
   const race = plan.verseny;
   const days = Math.round((parseD(race) - parseD(t)) / 864e5);
   const today = its.filter(i => i.datum === t);
-  if (today.length) html += dayHTML(t, today, 'Ma · ' + NAPNEV[parseD(t).getDay()] + ', ' + fmtD(t));
-  else if (t === '2026-11-15') html += dayHTML('2026-11-14', its.filter(i => i.het === 0), 'Ma · ha szombaton nem volt meg');
+  if (today.length) html += dayHTML(t, today, fmtD(t) + ' – ' + NAPNEV[parseD(t).getDay()] + ' · ma');
+  else if (t === '2026-11-15') html += dayHTML('2026-11-14', its.filter(i => i.het === 0), fmtD(t) + ' – vasárnap · ma (ha szombaton nem volt meg)');
   else html += `<div class="card"><h3 style="margin:0;font-size:14px;color:var(--mute)">MA</h3><div class="muted">Ma nincs edzés a tervben.</div></div>`;
   // következő napok
   const next = [...groupByDay(its.filter(i => i.datum > t)).entries()].slice(0, 2);
