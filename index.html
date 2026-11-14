@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Edzésterv">
-<meta name="theme-color" content="#d71920">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)"><meta name="theme-color" content="#0f141c" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -66,6 +66,27 @@ input[type=text],input[type=password]{width:100%;padding:10px;border:1px solid v
 .wkrow{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0;border-top:1px solid var(--line)}
 .wkrow .bar{flex:0 0 40%;margin:0}
 .wmegj{font-size:14px;color:var(--mute);margin:-4px 0 10px;padding:0 4px}
+
+/* letisztult stílus */
+:root{--bg:#fff;--line:#eee}
+@media(prefers-color-scheme:dark){:root{--bg:#0f141c;--line:#232b38}}
+header{background:var(--bg)!important;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:14px}
+header h1{font-size:26px;font-weight:750;letter-spacing:-.02em}
+header h1:after{content:"";display:block;width:28px;height:3px;background:#d71920;margin-top:6px;border-radius:2px}
+header .sub{color:var(--mute);opacity:1;margin-top:6px}
+header .sub b{color:#d71920}
+#sync{color:#d71920}
+.card{border:0;border-radius:0;padding:14px 4px;margin:0;border-bottom:1px solid var(--line);background:var(--bg)}
+.day.today{box-shadow:none;border:0;border-left:3px solid #d71920;padding-left:12px;border-bottom:1px solid var(--line)}
+.day h3{font-size:12px;letter-spacing:.08em;color:#d71920}
+.it{border:0;padding:6px 0}
+.tag{background:none!important;color:var(--mute);padding:0;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:1px}
+.chk{width:24px;height:24px;flex-basis:24px;border-width:1.5px}
+.it.done .chk{background:#d71920;border-color:#d71920}
+nav{background:var(--bg);border-top:1px solid var(--line)}
+.it.rest .tag{display:none}
+.bar i{background:#d71920}
+.bar{height:4px}
 </style>
 </head>
 <body>

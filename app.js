@@ -161,7 +161,6 @@ function renderMa() {
   let html = '';
   const race = plan.verseny;
   const days = Math.round((parseD(race) - parseD(t)) / 864e5);
-  if (days >= 0) html += `<div class="muted" style="margin:0 4px 10px">Még <b>${days}</b> nap a versenyig</div>`;
   const today = its.filter(i => i.datum === t);
   if (today.length) html += dayHTML(t, today, 'Ma · ' + NAPNEV[parseD(t).getDay()] + ', ' + fmtD(t));
   else if (t === '2026-11-15') html += dayHTML('2026-11-14', its.filter(i => i.het === 0), 'Ma · ha szombaton nem volt meg');
@@ -248,6 +247,8 @@ function renderSetup(msg) {
 
 function render() {
   if (!plan) return;
+  const dl = Math.round((parseD(plan.verseny) - parseD(todayStr())) / 864e5);
+  $('#sub').innerHTML = dl > 0 ? `Még <b>${dl}</b> nap a versenyig` : dl === 0 ? '<b>Ma van a verseny!</b>' : 'IRONMAN 70.3 St. Pölten';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
   const y = window.scrollY;
   ({ ma: renderMa, het: renderHet, halad: renderHalad, info: renderInfo })[view]();
