@@ -80,7 +80,9 @@ header .sub b{color:#d71920}
 .day.today{box-shadow:none;border:0;border-left:3px solid #d71920;padding-left:12px;border-bottom:1px solid var(--line)}
 .day h3{font-size:12px;letter-spacing:.08em;color:#d71920}
 .it{border:0;padding:6px 0}
-.tag{background:none!important;color:var(--mute);padding:0;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:1px}
+.tag{background:none!important;color:var(--c);padding:0;font-weight:650;font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.tag:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}
+td .tag{display:inline-flex}
 .chk{width:24px;height:24px;flex-basis:24px;border-width:1.5px}
 .it.done .chk{background:#d71920;border-color:#d71920}
 nav{background:var(--bg);border-top:1px solid var(--line)}

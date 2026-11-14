@@ -129,6 +129,15 @@ function weekStats(h) {
 }
 
 /* ---------- rendering ---------- */
+const LABEL = s => s === 'Bringa' ? 'Bicikli' : s;
+const bike = t => t.replace(/Bringa/g, 'Bicikli').replace(/bringa/g, 'bicikli');
+function shortName(i) {
+  let t = i.edzes;
+  const pre = { Brick: /^Bringa:\s+/, Bringa: /^Bringa:?\s+/, Futás: /^Futás:?\s+/, Úszás: /^Úszás:?\s+/ }[i.sport];
+  if (pre && pre.test(t)) t = t.replace(pre, '');
+  if (i.sport === 'Kondi') { const m = t.match(/^Kondi\s*\((.*)\)$/); if (m) t = m[1]; }
+  return bike(t.charAt(0).toUpperCase() + t.slice(1));
+}
 function itemHTML(i) {
   const e = entry(i.id);
   const rest = isRest(i);
@@ -138,7 +147,7 @@ function itemHTML(i) {
   return `<div class="${cls}" data-id="${i.id}">
     <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '✓' : ''}</button>
     <div class="body" data-tog="${i.id}">
-      <div class="t"><span class="tag" style="background:var(--${i.sport})">${esc(i.sport)}</span>${esc(i.edzes)}</div>
+      ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : shortName(i))}</div>
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g)}</div>` : ''}
       <div class="how">${esc(i.hogyan)}</div>
@@ -206,7 +215,7 @@ function renderHalad() {
   const sports = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi'];
   html += `<div class="card"><b>Sportáganként (eddig esedékes)</b><table>${sports.map(s => {
     const p = past.filter(i => i.sport === s), d = p.filter(i => entry(i.id).k);
-    return `<tr><td><span class="tag" style="background:var(--${s})">${s}</span></td><td>${d.length} / ${p.length}</td></tr>`;
+    return `<tr><td><span class="tag" style="--c:var(--${s})">${LABEL(s)}</span></td><td>${d.length} / ${p.length}</td></tr>`;
   }).join('')}</table></div>`;
   html += `<div class="card"><b>Hetek</b>${weeks().map((w, k) => {
     const st = weekStats(w.het);
