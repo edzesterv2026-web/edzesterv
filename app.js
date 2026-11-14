@@ -299,6 +299,10 @@ $('#main').addEventListener('input', e => {
 });
 
 /* ---------- start ---------- */
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) location.reload(); });
+}
 if (!cfg || !cfg.token) renderSetup();
 else { if (plan) render(); else $('#main').innerHTML = '<div class="muted" style="padding:20px">Betöltés…</div>'; loadRemote(); }
