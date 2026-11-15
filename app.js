@@ -13,6 +13,8 @@ let cfg = ls.get('cfg', null);
 let plan = ls.get('plan', null);
 let log = ls.get('log', {});
 let garmin = ls.get('garmin', { hetek: {}, edzesek: {} });
+let uszi = ls.get('uszi', null);
+let uDay = null;
 let pend = ls.get('pend', {});
 let view = 'ma';
 let weekIdx = null;
@@ -60,10 +62,11 @@ async function loadRemote() {
   if (!navigator.onLine) { setSync('offline'); return; }
   setSync('frissítés…');
   try {
-    const [p, l, g] = await Promise.all([ghGet('plan.json'), ghGet('log.json'), ghGet('garmin.json').catch(() => null)]);
+    const [p, l, g, u] = await Promise.all([ghGet('plan.json'), ghGet('log.json'), ghGet('garmin.json').catch(() => null), ghGet('uszodak.json').catch(() => null)]);
     plan = p.data; ls.set('plan', plan);
     log = l.data || {}; ls.set('log', log);
     if (g) { garmin = g.data; ls.set('garmin', garmin); }
+    if (u) { uszi = u.data; ls.set('uszi', uszi); }
     setSync(Object.keys(pend).length ? 'mentésre vár' : '✓');
     render();
     if (Object.keys(pend).length) flush();
@@ -339,6 +342,42 @@ function feelHTML() {
     ${pts.some(v => v != null) || kn.some(v => v) ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}<path d="${path}" fill="none" stroke="#d71920" stroke-width="2"/>${dots}${knee}</svg>` : '<div class="muted" style="padding:8px 0">Még nincs értékelt edzés. Kipipáláskor add meg, hogy ment, és hogy érezted-e a térdedet.</div>'}
     ${notes.length ? `<div class="notes">${notes.map(x => `<div class="nrow"><span class="muted">${fmtD(eff(x.i))}</span> <b>${esc(LABEL(x.i.sport))}</b> ${x.e.tr ? `<span class="kn k${x.e.tr}">térd: ${['rendben', 'érzem', 'fáj'][x.e.tr]}</span>` : ''}${x.e.m ? `<div>${esc(x.e.m)}</div>` : ''}</div>`).join('')}</div>` : ''}</div>`;
 }
+function poolSlots(u, d) {
+  const z = (u.zarva || []).find(x => d >= x[0] && d <= x[1]);
+  if (z) return { zarva: z };
+  if (u.datum && u.datum[d]) return { s: u.datum[d], m: u.datumMegj && u.datumMegj[d] };
+  const r = (u.rend || []).find(x => d >= x.tol && d <= x.ig);
+  if (r) return { s: r.napok[String(parseD(d).getDay())] || [], m: r.m, heti: true };
+  return null;
+}
+const toMin = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+function renderUszoda() {
+  const t = todayStr();
+  if (!uDay) uDay = t;
+  let html = `<div class="chips">`;
+  for (let k = 0; k < 14; k++) { const d = addDays(t, k), dd = parseD(d); html += `<button class="chip ${d === uDay ? 'on' : ''}" data-uday="${d}"><small>${k === 0 ? 'ma' : k === 1 ? 'holnap' : NAPNEV[dd.getDay()].slice(0, 3)}</small>${dd.getDate()}.</button>`; }
+  html += `</div>`;
+  const dd = parseD(uDay);
+  html += `<div class="card day"><h3>${fmtD(uDay)} – ${NAPNEV[dd.getDay()]}${uDay === t ? ' · ma' : ''}</h3></div>`;
+  if (!uszi) { $('#main').innerHTML = html + '<div class="muted" style="padding:16px">Betöltés…</div>'; return; }
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  uszi.uszodak.forEach(u => {
+    const r = poolSlots(u, uDay);
+    let body = '';
+    if (r && r.zarva) body = `<div class="pz">Zárva (${esc(r.zarva[2] || '')}: ${fmtD(r.zarva[0])} – ${fmtD(r.zarva[1])})</div>`;
+    else if (r && r.s.length) {
+      const bar = r.s.map(s => { const a = Math.max(0, toMin(s.t) - 300), b = Math.min(1020, toMin(s.v) - 300); return `<i style="left:${100 * a / 1020}%;width:${100 * (b - a) / 1020}%"></i>`; }).join('');
+      body = `<div class="tl">${bar}${uDay === t && nowMin >= 300 && nowMin <= 1320 ? `<b style="left:${100 * (nowMin - 300) / 1020}%"></b>` : ''}</div><div class="tlx"><span>5</span><span>9</span><span>13</span><span>17</span><span>21</span></div>`;
+      body += r.s.map(s => { const on = uDay === t && nowMin >= toMin(s.t) && nowMin < toMin(s.v); return `<div class="ps ${on ? 'now' : ''}"><span class="pt">${s.t}–${s.v}</span><span>${esc(s.p || '')}${s.m ? `<small>${esc(s.m)}</small>` : ''}</span>${on ? '<em>most</em>' : ''}</div>`; }).join('');
+      if (r.m) body += `<div class="pm">${esc(r.m)}</div>`;
+    } else if (r) body = `<div class="pz">Ezen a napon nincs közönségúszás.</div>`;
+    else body = `<div class="pz">${esc(u.nincs || 'Erre a napra még nincs adat.')}</div>`;
+    html += `<div class="card pool"><div class="pn">${esc(u.nev)}</div>${u.medence ? `<div class="pmed">${esc(u.medence)}</div>` : ''}${body}
+      ${u.info ? `<div class="pm">${esc(u.info)}</div>` : ''}<a class="pl" href="${esc(u.forras)}" target="_blank" rel="noopener">Forrás megnyitása</a></div>`;
+  });
+  html += `<div class="muted" style="padding:12px 16px">Frissítve: ${esc(uszi.frissitve || '')}</div>`;
+  $('#main').innerHTML = html;
+}
 function renderInfo() {
   let html = `<div class="card"><b>Fogalmak</b><table>${plan.fogalmak.map(f => `<tr><th style="width:38%">${esc(f.f)}</th><td>${esc(f.j)}</td></tr>`).join('')}</table></div>`;
   const b = beall();
@@ -383,7 +422,7 @@ function render() {
   $('#sub').innerHTML = dl > 0 ? `Még <b>${dl}</b> nap a versenyig` : dl === 0 ? '<b>Ma van a verseny!</b>' : 'IRONMAN 70.3 St. Pölten';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
   const y = window.scrollY;
-  ({ ma: renderMa, het: renderHet, halad: renderHalad, info: renderInfo })[view]();
+  ({ ma: renderMa, het: renderHet, halad: renderHalad, uszoda: renderUszoda, info: renderInfo })[view]();
   if (y) window.scrollTo(0, y);
 }
 
@@ -402,6 +441,8 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const ud = e.target.closest('[data-uday]');
+  if (ud) { uDay = ud.dataset.uday; render(); return; }
   if (e.target.id === 'addbtn') { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
   if (e.target.id === 'ad-cancel') { addOpen = false; render(); return; }
   if (e.target.id === 'ad-save') {
