@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '24';
+const APP_VERSION = '25';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -222,6 +222,11 @@ function moveHTML(i) {
   if (cur !== i.datum && (i.datum < mon || i.datum > addDays(mon, 6))) opts += `<option value="${i.datum}">${fmtD(i.datum)} (eredeti nap)</option>`;
   return `<div class="move">Nap: <select data-move="${i.id}">${opts}</select>${cur !== i.datum ? ` <button data-reset="${i.id}">eredeti: ${fmtD(i.datum)}</button>` : ''}</div>`;
 }
+function dispName(i) { const e = entry(i.id); if (e.n) return e.n; return isRest(i) ? i.edzes : augTitle(i, shortName(i)); }
+function renHTML(i) {
+  const e = entry(i.id), orig = isRest(i) ? i.edzes : shortName(i);
+  return `<div class="ren"><span>Név</span><input type="text" data-ren="${i.id}" value="${esc(e.n || orig)}" autocomplete="off">${e.n && !i.extra ? `<button data-renreset="${i.id}">eredeti</button>` : ''}</div>`;
+}
 function itemHTML(i) {
   const e = entry(i.id);
   const rest = isRest(i);
@@ -232,12 +237,13 @@ function itemHTML(i) {
   return `<div class="${cls}" data-id="${i.id}">
     <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.4l2.9 2.9 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</button>
     <div class="body" data-tog="${i.id}">
-      ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : augTitle(i, shortName(i)))}</div>
+      ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(dispName(i))}</div>
       ${moved && openId !== i.id ? `<div class="note">áthelyezve (eredetileg ${fmtD(i.datum)})</div>` : ''}
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g.s)}</div>` : ''}
       <div class="how">${esc(augFTP(i.hogyan))}</div>
-      ${rest ? `<div class="extra">${moveHTML(i)}</div>` : `<div class="extra">
+      ${rest ? `<div class="extra">${renHTML(i)}${moveHTML(i)}</div>` : `<div class="extra">
+        ${renHTML(i)}
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
         <div class="feel knee">Térd: ${['rendben', 'érzem', 'fáj'].map((l, n) => `<button data-knee="${n}" class="${e.tr === n ? 'on' : ''}">${l}</button>`).join('')}</div>
         ${moveHTML(i)}
@@ -526,6 +532,9 @@ $('#main').addEventListener('click', e => {
   if (del) { change(del.dataset.del, { del: true }); openId = null; render(); return; }
   const kb = e.target.closest('[data-knee]');
   if (kb) { const id = kb.closest('.it').dataset.id, v = Number(kb.dataset.knee); change(id, { tr: entry(id).tr === v ? 0 : v }); render(); return; }
+  const rr = e.target.closest('[data-renreset]');
+  if (rr) { change(rr.dataset.renreset, { n: null }); render(); return; }
+  if (e.target.closest('input')) return;
   const rs = e.target.closest('[data-reset]');
   if (rs) { change(rs.dataset.reset, { d: null }); render(); return; }
   if (e.target.closest('select')) return;
@@ -622,6 +631,18 @@ function cleanupDrag() {
 }
 
 $('#main').addEventListener('input', e => {
+  if (e.target.dataset.ren) {
+    const id = e.target.dataset.ren, it = allItems().find(x => x.id === id), v = e.target.value.trim();
+    if (!it) return;
+    const orig = isRest(it) ? it.edzes : shortName(it);
+    if (it.extra) pend[id] = Object.assign({}, pend[id] || {}, { edzes: v || it.edzes, n: null });
+    else pend[id] = Object.assign({}, pend[id] || {}, { n: v && v !== orig ? v : null });
+    ls.set('pend', pend);
+    const t = e.target.closest('.it').querySelector('.t'); if (t) t.textContent = v || dispName(it);
+    setSync('mentésre vár');
+    clearTimeout(flushTimer); flushTimer = setTimeout(flush, 2000);
+    return;
+  }
   if (e.target.dataset.note) {
     const id = e.target.dataset.note;
     pend[id] = Object.assign({}, pend[id] || {}, { m: e.target.value });
