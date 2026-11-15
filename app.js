@@ -351,29 +351,86 @@ function poolSlots(u, d) {
   return null;
 }
 const toMin = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+let uTab = 'nap';
+const fmtT = m => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+// rács: 8 pálya × félórák; szabad = '1'
+function poolGrid(u, d) {
+  if (u.racs && u.racs[d]) { const st = toMin(u.racsKezd || '06:00'), step = u.racsLepes || 30; return { st, step, lanes: u.racs[d] }; }
+  const r = poolSlots(u, d);
+  if (!r || r.zarva || !u.palyaSzam || !r.s.some(s => s.pl)) return null;
+  const st = 360, step = 30, n = 32;
+  const lanes = Array.from({ length: u.palyaSzam }, (_, li) => { let s = ''; for (let k = 0; k < n; k++) { const a = st + k * step; s += r.s.some(x => x.pl && x.pl.includes(li + 1) && toMin(x.t) <= a && a + step <= toMin(x.v)) ? '1' : '0'; } return s; });
+  return { st, step, lanes, m: r.m };
+}
+function gridHTML(g, isToday, nowMin) {
+  const n = g.lanes[0].length, cols = `18px repeat(${n},1fr)`;
+  const nowK = isToday ? Math.floor((nowMin - g.st) / g.step) : -1;
+  let h = `<div class="glg"><span><i style="background:var(--Úszás)"></i>szabad</span><span><i style="background:#e5e5ea"></i>bérelt / zárva</span><span class="lgr">1 kocka = ${g.step} perc</span></div>`;
+  h += `<div class="grid" style="grid-template-columns:${cols}">`;
+  g.lanes.forEach((l, li) => { h += `<div class="gl">${li + 1}.</div>` + [...l].map((c, k) => `<div class="gc ${c === '1' ? 'f' : ''} ${k === nowK ? 'now' : ''}"></div>`).join(''); });
+  h += `</div><div class="gax" style="grid-template-columns:${cols}"><span></span>`;
+  for (let k = 0; k < n; k++) { const m = g.st + k * g.step; h += `<span>${m % 120 === 0 ? m / 60 : ''}</span>`; }
+  return h + `</div>`;
+}
+function freeWindows(u, d) {
+  const g = poolGrid(u, d), out = [];
+  if (g) {
+    const n = g.lanes[0].length; let s = null, mn = 99, mx = 0;
+    for (let k = 0; k <= n; k++) {
+      const f = k < n ? g.lanes.reduce((c, l) => c + (l[k] === '1' ? 1 : 0), 0) : 0;
+      if (f >= 2) { if (s === null) { s = k; mn = f; mx = f; } else { mn = Math.min(mn, f); mx = Math.max(mx, f); } }
+      else if (s !== null) { out.push({ a: g.st + s * g.step, b: g.st + k * g.step, n: mn, mx, tot: g.lanes.length }); s = null; }
+    }
+    return out;
+  }
+  const r = poolSlots(u, d);
+  if (!r || r.zarva) return out;
+  r.s.forEach(x => out.push({ a: toMin(x.t), b: toMin(x.v), n: x.n || (x.pl ? x.pl.length : null), tot: u.palyaSzam, p: x.p }));
+  return out;
+}
+const SHORT = { hullam: 'Hullám – Abay', pte: 'PTE Uszoda', ank: 'ANK', pecsvarad: 'Pécsvárad' };
+function renderMikor(t, nowMin) {
+  let html = `<div class="muted" style="padding:4px 16px 8px">A következő 3 nap sávjai, ahol legalább 2 pálya szabad (vagy nyitva van), időrendben.</div>`;
+  for (let k = 0; k < 3; k++) {
+    const d = addDays(t, k), list = [];
+    uszi.uszodak.forEach(u => freeWindows(u, d).forEach(w => { if (k > 0 || w.b > nowMin) list.push(Object.assign({ u }, w)); }));
+    list.sort((x, y) => x.a - y.a || (y.n || 0) - (x.n || 0));
+    html += `<div class="card day"><h3>${fmtD(d)} – ${NAPNEV[parseD(d).getDay()]}${k === 0 ? ' · ma' : k === 1 ? ' · holnap' : ''}</h3>`;
+    html += list.length ? list.map(w => {
+      const on = k === 0 && nowMin >= w.a && nowMin < w.b;
+      const bars = w.n && w.tot ? `<div class="lb">${Array.from({ length: w.tot }, (_, i) => `<i class="${i < w.n ? 'f' : i < (w.mx || w.n) ? 'h' : ''}"></i>`).join('')}</div>` : '';
+      return `<div class="mk ${on ? 'now' : ''}"><div class="mt">${fmtT(w.a)}</div><div class="mb"><div class="pn">${esc(SHORT[w.u.id] || w.u.nev)}</div><div class="pmed">${fmtT(w.a)}–${fmtT(w.b)} · ${w.n ? (w.n === w.tot ? 'mind a ' + w.n + ' pálya szabad' : (w.mx && w.mx > w.n ? w.n + '–' + w.mx : w.n) + ' szabad pálya') : esc(w.p || 'nyitva')}</div></div>${on ? '<em>most</em>' : bars}</div>`;
+    }).join('') : `<div class="pz" style="padding:10px 16px">Nincs ismert szabad sáv.</div>`;
+    html += `</div>`;
+  }
+  return html;
+}
 function renderUszoda() {
   const t = todayStr();
   if (!uDay) uDay = t;
-  let html = `<div class="chips">`;
-  for (let k = 0; k < 14; k++) { const d = addDays(t, k), dd = parseD(d); html += `<button class="chip ${d === uDay ? 'on' : ''}" data-uday="${d}"><small>${k === 0 ? 'ma' : k === 1 ? 'holnap' : NAPNEV[dd.getDay()].slice(0, 3)}</small>${dd.getDate()}.</button>`; }
-  html += `</div>`;
-  const dd = parseD(uDay);
-  html += `<div class="card day"><h3>${fmtD(uDay)} – ${NAPNEV[dd.getDay()]}${uDay === t ? ' · ma' : ''}</h3></div>`;
+  let html = `<div class="seg"><button data-utab="nap" class="${uTab === 'nap' ? 'on' : ''}">Pályák napra</button><button data-utab="mikor" class="${uTab === 'mikor' ? 'on' : ''}">Mikor menjek?</button></div>`;
   if (!uszi) { $('#main').innerHTML = html + '<div class="muted" style="padding:16px">Betöltés…</div>'; return; }
   const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  if (uTab === 'mikor') { $('#main').innerHTML = html + renderMikor(t, nowMin) + `<div class="muted" style="padding:12px 16px">Frissítve: ${esc(uszi.frissitve || '')}</div>`; return; }
+  html += `<div class="chips">`;
+  for (let k = 0; k < 14; k++) { const d = addDays(t, k), dd = parseD(d); html += `<button class="chip ${d === uDay ? 'on' : ''}" data-uday="${d}"><small>${k === 0 ? 'ma' : k === 1 ? 'holnap' : NAPNEV[dd.getDay()].slice(0, 3)}</small>${dd.getDate()}.</button>`; }
+  html += `</div>`;
+  const dd = parseD(uDay), isToday = uDay === t;
+  html += `<div class="card day"><h3>${fmtD(uDay)} – ${NAPNEV[dd.getDay()]}${isToday ? ' · ma' : ''}</h3></div>`;
   uszi.uszodak.forEach(u => {
-    const r = poolSlots(u, uDay);
+    const r = poolSlots(u, uDay), g = poolGrid(u, uDay);
     let body = '';
     if (r && r.zarva) body = `<div class="pz">Zárva (${esc(r.zarva[2] || '')}: ${fmtD(r.zarva[0])} – ${fmtD(r.zarva[1])})</div>`;
+    else if (g) { body = gridHTML(g, isToday, nowMin); if (g.m) body += `<div class="pm">${esc(g.m)}</div>`; }
     else if (r && r.s.length) {
       const bar = r.s.map(s => { const a = Math.max(0, toMin(s.t) - 300), b = Math.min(1020, toMin(s.v) - 300); return `<i style="left:${100 * a / 1020}%;width:${100 * (b - a) / 1020}%"></i>`; }).join('');
-      body = `<div class="tl">${bar}${uDay === t && nowMin >= 300 && nowMin <= 1320 ? `<b style="left:${100 * (nowMin - 300) / 1020}%"></b>` : ''}</div><div class="tlx"><span>5</span><span>9</span><span>13</span><span>17</span><span>21</span></div>`;
-      body += r.s.map(s => { const on = uDay === t && nowMin >= toMin(s.t) && nowMin < toMin(s.v); return `<div class="ps ${on ? 'now' : ''}"><span class="pt">${s.t}–${s.v}</span><span>${esc(s.p || '')}${s.m ? `<small>${esc(s.m)}</small>` : ''}</span>${on ? '<em>most</em>' : ''}</div>`; }).join('');
+      body = `<div class="tl">${bar}${isToday && nowMin >= 300 && nowMin <= 1320 ? `<b style="left:${100 * (nowMin - 300) / 1020}%"></b>` : ''}</div><div class="tlx"><span>5</span><span>9</span><span>13</span><span>17</span><span>21</span></div>`;
+      body += r.s.map(s => { const on = isToday && nowMin >= toMin(s.t) && nowMin < toMin(s.v); return `<div class="ps ${on ? 'now' : ''}"><span class="pt">${s.t}–${s.v}</span><span>${esc(s.p || '')}${s.m ? `<small>${esc(s.m)}</small>` : ''}</span>${on ? '<em>most</em>' : ''}</div>`; }).join('');
       if (r.m) body += `<div class="pm">${esc(r.m)}</div>`;
     } else if (r) body = `<div class="pz">Ezen a napon nincs közönségúszás.</div>`;
     else body = `<div class="pz">${esc(u.nincs || 'Erre a napra még nincs adat.')}</div>`;
     html += `<div class="card pool"><div class="pn">${esc(u.nev)}</div>${u.medence ? `<div class="pmed">${esc(u.medence)}</div>` : ''}${body}
-      ${u.info ? `<div class="pm">${esc(u.info)}</div>` : ''}<a class="pl" href="${esc(u.forras)}" target="_blank" rel="noopener">Forrás megnyitása</a></div>`;
+      ${u.info ? `<details class="pi"><summary>Tudnivalók</summary><div class="pm">${esc(u.info)}</div></details>` : ''}<a class="pl" href="${esc(u.forras)}" target="_blank" rel="noopener">Forrás megnyitása</a></div>`;
   });
   html += `<div class="muted" style="padding:12px 16px">Frissítve: ${esc(uszi.frissitve || '')}</div>`;
   $('#main').innerHTML = html;
@@ -441,6 +498,8 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const ut = e.target.closest('[data-utab]');
+  if (ut) { uTab = ut.dataset.utab; window.scrollTo(0, 0); render(); return; }
   const ud = e.target.closest('[data-uday]');
   if (ud) { uDay = ud.dataset.uday; render(); return; }
   if (e.target.closest('#addbtn')) { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
