@@ -164,7 +164,7 @@ function itemHTML(i) {
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g)}</div>` : ''}
       <div class="how">${esc(i.hogyan)}</div>
-      ${rest ? '' : `<div class="extra">
+      ${rest ? `<div class="extra">${moveHTML(i)}</div>` : `<div class="extra">
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
         ${moveHTML(i)}
         <textarea data-note="${i.id}" placeholder="Megjegyzés (pl. térd, pulzus, idő)">${esc(e.m || '')}</textarea>
@@ -175,7 +175,7 @@ function dayHTML(datum, its, label) {
   const t = todayStr();
   const d = parseD(datum);
   const title = label || (fmtD(datum) + ' – ' + NAPNEV[d.getDay()]);
-  if (its.some(i => !isRest(i))) its = its.filter(i => i.sport !== 'Pihenő');
+  if (its.some(i => !isRest(i))) its = its.filter(i => i.sport !== 'Pihenő' || entry(i.id).d);
   const body = its.length ? its.map(itemHTML).join('') : '<div class="it rest empty"><button class="chk"></button><div class="body"><div class="t">Nincs edzés</div></div></div>';
   return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}</div>`;
 }
@@ -327,7 +327,7 @@ const mainEl = $('#main');
 mainEl.addEventListener('touchstart', e => {
   if (view !== 'het' || e.touches.length > 1) return;
   const it = e.target.closest('.it[data-id]');
-  if (!it || it.classList.contains('rest') || e.target.closest('.chk,textarea,select,button,.extra')) return;
+  if (!it || it.classList.contains('empty') || e.target.closest('.chk,textarea,select,button,.extra')) return;
   const t = e.touches[0];
   drag = { it, id: it.dataset.id, x: t.clientX, y: t.clientY, on: false };
   drag.timer = setTimeout(() => startDrag(), 450);
