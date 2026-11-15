@@ -1,0 +1,117 @@
+{
+ "verzio": 1,
+ "frissitve": "2027-01-01",
+ "verseny": "2027-06-13",
+ "versenyNev": "Példa: félmaraton",
+ "het0": [
+  "2027-01-02",
+  "2027-01-03"
+ ],
+ "het1Hetfo": "2027-01-04",
+ "pulzus": {
+  "Z1": "140 alatt",
+  "Z2": "140–150",
+  "tempó": "151–160",
+  "küszöb": "161–170"
+ },
+ "hetek": [
+  {
+   "het": 0,
+   "cim": "0. hét – jan. 2–3. · bemelegítő hétvége",
+   "megj": ""
+  },
+  {
+   "het": 1,
+   "cim": "1. hét – jan. 4–10. · alapozás · kb. 5 óra",
+   "megj": "Az első héten a cél a rutin felvétele."
+  }
+ ],
+ "edzesek": [
+  {
+   "id": "2027-01-02-1",
+   "het": 0,
+   "datum": "2027-01-02",
+   "nap": "Szo",
+   "sport": "Futás",
+   "edzes": "Futás 30' Z1",
+   "hogyan": "Nagyon laza, beszélgetős tempó."
+  },
+  {
+   "id": "2027-01-04-1",
+   "het": 1,
+   "datum": "2027-01-04",
+   "nap": "H",
+   "sport": "Bringa",
+   "edzes": "Bringa 60' Z2",
+   "hogyan": "Egyenletes tekerés, 60–70% FTP."
+  },
+  {
+   "id": "2027-01-04-2",
+   "het": 1,
+   "datum": "2027-01-04",
+   "nap": "H",
+   "sport": "Kondi",
+   "edzes": "Kondi (alsótest)",
+   "hogyan": "Guggolás, kitörés, csípőemelés, 40'."
+  },
+  {
+   "id": "2027-01-05-1",
+   "het": 1,
+   "datum": "2027-01-05",
+   "nap": "K",
+   "sport": "Pihenő",
+   "edzes": "Pihenő",
+   "hogyan": "–"
+  },
+  {
+   "id": "2027-01-06-1",
+   "het": 1,
+   "datum": "2027-01-06",
+   "nap": "Sze",
+   "sport": "Úszás",
+   "edzes": "Úszás 45': 6×100, 300 folyamatos",
+   "hogyan": "200 m laza; 6×100 m, közte 30 mp; 300 m megállás nélkül; 100 m laza."
+  },
+  {
+   "id": "2027-01-07-1",
+   "het": 1,
+   "datum": "2027-01-07",
+   "nap": "Cs",
+   "sport": "Futás",
+   "edzes": "Futás 40' Z2 + 6×20\" gyorsítás",
+   "hogyan": "A végén 6×20 mp fokozatos gyorsítás, közte 60–90 mp kocogás."
+  },
+  {
+   "id": "2027-01-09-1",
+   "het": 1,
+   "datum": "2027-01-09",
+   "nap": "Szo",
+   "sport": "Brick",
+   "edzes": "Bringa 1:30 Z2, utána futás 15'",
+   "hogyan": "5–10 percen belül indulj futni, az első 10 perc legyen lassú."
+  },
+  {
+   "id": "2027-01-10-1",
+   "het": 1,
+   "datum": "2027-01-10",
+   "nap": "V",
+   "sport": "Futás",
+   "edzes": "Futás 70' Z2",
+   "hogyan": "Egyenletes, beszélgetős tempó."
+  }
+ ],
+ "fogalmak": [
+  {
+   "f": "Z1 futás",
+   "j": "Nagyon laza, a pulzus a fenti Z1-tartományban."
+  },
+  {
+   "f": "Z2 futás",
+   "j": "Laza, de már érzed a munkát."
+  },
+  {
+   "f": "Brick",
+   "j": "Bicikli után 5–10 percen belül futás."
+  }
+ ]
+}

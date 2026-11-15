@@ -1,11 +1,11 @@
 'use strict';
-const APP_VERSION = '22';
+const APP_VERSION = '23';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
 checkUpdate();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
-const DEF = { owner: 'edzesterv2026-web', repo: 'edzesnaplo-adatok' };
+const DEF = { owner: '', repo: 'edzesnaplo-adatok' };
 const REST = ['Pihenő', 'Utazás'];
 const NAPNEV = ['vasárnap', 'hétfő', 'kedd', 'szerda', 'csütörtök', 'péntek', 'szombat'];
 const HONAP = ['jan.', 'febr.', 'márc.', 'ápr.', 'máj.', 'jún.', 'júl.', 'aug.', 'szept.', 'okt.', 'nov.', 'dec.'];
@@ -72,7 +72,8 @@ async function loadRemote() {
     plan = p.data; ls.set('plan', plan);
     log = l.data || {}; ls.set('log', log);
     if (g) { garmin = g.data; ls.set('garmin', garmin); }
-    if (u) { uszi = u.data; ls.set('uszi', uszi); }
+    if (u) { uszi = u.data; ls.set('uszi', uszi); } else { uszi = null; ls.set('uszi', null); }
+    showPoolTab();
     setSync(Object.keys(pend).length ? 'mentésre vár' : '✓');
     render();
     if (Object.keys(pend).length) flush();
@@ -116,7 +117,9 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function weeks() { return plan.hetek; }
 const eff = i => entry(i.id).d || i.datum;
 const ORD = {};
-function weekRange(h) { if (h === 0) return ['2026-11-14', '2026-11-15']; const mon = addDays('2026-11-16', 7 * (h - 1)); return [mon, addDays(mon, 6)]; }
+const H0 = () => (plan && plan.het0) || ['2026-11-14', '2026-11-15'];
+const H1 = () => (plan && plan.het1Hetfo) || '2026-11-16';
+function weekRange(h) { if (h === 0) return H0(); const mon = addDays(H1(), 7 * (h - 1)); return [mon, addDays(mon, 6)]; }
 function sortEff(its) { return its.slice().sort((x, y) => eff(x) < eff(y) ? -1 : eff(x) > eff(y) ? 1 : ORD[x.id] - ORD[y.id]); }
 function extras() {
   const keys = new Set(Object.keys(log).concat(Object.keys(pend)).filter(k => k.startsWith('x-')));
@@ -189,14 +192,15 @@ function weekStats(h) {
 
 /* ---------- rendering ---------- */
 const beall = () => entry('_beall');
-const PULZ = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '167–176' };
+const PULZ_DEF = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '167–176' };
+const PZ = () => (plan && plan.pulzus) || PULZ_DEF;
 function watts(p) { const f = +beall().ftp; return f ? Math.round(f * p / 100) : null; }
 function augFTP(t) {
   if (!+beall().ftp) return t;
   return t.replace(/(\d+)(?:\s*[–-]\s*(\d+))?\s*% FTP/g, (m, x, y) => y ? `${m} (${watts(+x)}–${watts(+y)} W)` : `${m} (${watts(+x)} W)`);
 }
 function augTitle(i, t) {
-  if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/\bZ([12])\b/g, (m) => `${m} (${PULZ[m]})`);
+  if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/\bZ([12])\b/g, (m) => PZ()[m] ? `${m} (${PZ()[m]})` : m);
   if (i.sport === 'Bringa' && +beall().ftp) t = t.replace(/\bZ2\b/, `Z2 (${watts(56)}–${watts(75)} W)`);
   return augFTP(t);
 }
@@ -257,7 +261,7 @@ function addHTML(defDate) {
   if (!addOpen) return `<div class="addwrap"><button id="addbtn" aria-label="Edzés hozzáadása"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>`;
   const d = parseD(defDate), mon = addDays(defDate, -((d.getDay() + 6) % 7));
   let opts = '';
-  for (let k = -7; k < 7; k++) { const x = addDays(mon, k); if (x < '2026-11-14') continue; opts += `<option value="${x}" ${x === defDate ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
+  for (let k = -7; k < 7; k++) { const x = addDays(mon, k); if (x < H0()[0]) continue; opts += `<option value="${x}" ${x === defDate ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
   const sp = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi', 'Egyéb'].map(s => `<option value="${s}">${LABEL(s)}</option>`).join('');
   return `<div class="card addform"><h3>Edzés hozzáadása</h3>
     <label>Nap<select id="ad-d">${opts}</select></label>
@@ -275,7 +279,7 @@ function renderMa() {
   const days = Math.round((parseD(race) - parseD(t)) / 864e5);
   const today = sortEff(its.filter(i => eff(i) === t));
   if (today.length) html += dayHTML(t, today, fmtD(t) + ' – ' + NAPNEV[parseD(t).getDay()] + ' · ma');
-  else if (t === '2026-11-15') html += dayHTML('2026-11-14', its.filter(i => i.het === 0), fmtD(t) + ' – vasárnap · ma (ha szombaton nem volt meg)');
+  else if (t > H0()[0] && t <= H0()[1] && its.some(i => i.het === 0 && !entry(i.id).k)) html += dayHTML(H0()[0], its.filter(i => i.het === 0), fmtD(t) + ' · ma (a 0. hét edzései)');
   else html += `<div class="card"><h3 style="margin:0;font-size:14px;color:var(--mute)">MA</h3><div class="muted">Ma nincs edzés a tervben.</div></div>`;
   // következő napok
   const next = [...groupByDay(its.filter(i => eff(i) > t)).entries()].sort((x, y) => x[0] < y[0] ? -1 : 1).slice(0, 2);
@@ -303,7 +307,7 @@ function renderHet() {
   if (gw) html += `<div class="card"><h3 style="margin:0 0 4px;font-size:14px;color:var(--mute)">⌚ GARMIN-ÖSSZESÍTŐ</h3><div style="font-size:14px;white-space:pre-line">${esc(gw)}</div></div>`;
   const its = itemsOfWeek(wk.het);
   html += `<div class="muted hint">Tipp: tartsd az ujjad egy edzésen, és húzd át másik napra.</div>`;
-  if (wk.het === 0) html += dayHTML('2026-11-14', its, 'nov. 14–15. – szombat vagy vasárnap');
+  if (wk.het === 0) html += dayHTML(H0()[0], its, H0()[0] === H0()[1] ? '' : `${fmtD(H0()[0])} – ${fmtD(H0()[1])} · bármelyik nap`);
   else { const g = groupByDay(its), mon = weekRange(wk.het)[0]; for (let k = 0; k < 7; k++) { const d = addDays(mon, k); html += dayHTML(d, g.get(d) || []); } }
   html += addHTML(weekRange(wk.het)[0] <= todayStr() && todayStr() <= weekRange(wk.het)[1] ? todayStr() : weekRange(wk.het)[0]);
   $('#main').innerHTML = html;
@@ -448,7 +452,7 @@ function renderInfo() {
     <label class="muted">FTP (watt) – a Zwift-teszt eredménye</label><input type="number" id="ftp" inputmode="numeric" value="${esc(b.ftp || '')}" placeholder="pl. 210">
     <button class="btn" id="ftpsave">Mentés</button>
     ${+b.ftp ? `<table style="margin-top:10px"><tr><th>Bicikli Z2 (56–75%)</th><td>${watts(56)}–${watts(75)} W</td></tr><tr><th>Sweet spot (88–94%)</th><td>${watts(88)}–${watts(94)} W</td></tr><tr><th>Küszöb (95–100%)</th><td>${watts(95)}–${watts(100)} W</td></tr><tr><th>Versenytempó (75–80%)</th><td>${watts(75)}–${watts(80)} W</td></tr></table>` : ''}
-    <table style="margin-top:10px"><tr><th>Futás Z1</th><td>150 alatt</td></tr><tr><th>Futás Z2</th><td>150–158</td></tr><tr><th>Tempó</th><td>159–166</td></tr><tr><th>Küszöb</th><td>167–176</td></tr></table></div>`;
+    <table style="margin-top:10px">${Object.entries(PZ()).map(([k, v]) => `<tr><th>Futás ${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>`;
   html += `<div class="card"><b>Beállítások</b><div class="muted" style="margin:6px 0">Terv frissítve: ${esc(plan.frissitve || '')}${garmin.frissitve ? ' · Garmin-ellenőrzés: ' + esc(garmin.frissitve) : ''}</div>
     <button class="btn ghost" id="reload">Frissítés most</button> <button class="btn ghost" id="reset">Kulcs cseréje</button></div>`;
   $('#main').innerHTML = html;
@@ -478,7 +482,9 @@ function renderSetup(msg) {
   };
 }
 
+function showPoolTab() { const b = document.querySelector('nav button[data-v="uszoda"]'); if (b) b.style.display = uszi ? '' : 'none'; }
 function render() {
+  showPoolTab();
   if (!plan) return;
   plan.edzesek.forEach((x, k) => ORD[x.id] = k);
   const dl = Math.round((parseD(plan.verseny) - parseD(todayStr())) / 864e5);
