@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '27';
+const APP_VERSION = '28';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -194,14 +194,16 @@ function weekStats(h) {
 const beall = () => entry('_beall');
 const PULZ_DEF = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '167–176' };
 const PZ = () => (plan && plan.pulzus) || PULZ_DEF;
-function watts(p) { const f = +beall().ftp; return f ? Math.round(f * p / 100) : null; }
+const tests = () => entry('_tesztek');
+function curFTP() { const l = (tests().ftp || []).slice().sort((x, y) => x.d < y.d ? -1 : 1); return l.length ? +l[l.length - 1].v : +beall().ftp || 0; }
+function watts(p) { const f = curFTP(); return f ? Math.round(f * p / 100) : null; }
 function augFTP(t) {
-  if (!+beall().ftp) return t;
+  if (!curFTP()) return t;
   return t.replace(/(\d+)(?:\s*[–-]\s*(\d+))?\s*% FTP/g, (m, x, y) => y ? `${m} (${watts(+x)}–${watts(+y)} W)` : `${m} (${watts(+x)} W)`);
 }
 function augTitle(i, t) {
   if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/Z1–Z2/g, 'Z1–Z2 (158 alatt)').replace(/\bZ([12])\b(?!–| \()/g, (m) => PZ()[m] ? `${m} (${PZ()[m]})` : m);
-  if (i.sport === 'Bringa' && +beall().ftp) t = t.replace(/\bZ2\b/, `Z2 (${watts(56)}–${watts(75)} W)`);
+  if (i.sport === 'Bringa' && curFTP()) t = t.replace(/\bZ2\b/, `Z2 (${watts(56)}–${watts(75)} W)`);
   return augFTP(t);
 }
 const LABEL = s => s === 'Bringa' ? 'Bicikli' : s;
@@ -345,13 +347,75 @@ function renderHet() {
   $('#main').innerHTML = html;
 }
 
+let hTab = 'att';
+const segH = () => `<div class="seg"><button data-htab="att" class="${hTab === 'att' ? 'on' : ''}">Áttekintés</button><button data-htab="verseny" class="${hTab === 'verseny' ? 'on' : ''}">Versenyterv</button><button data-htab="teszt" class="${hTab === 'teszt' ? 'on' : ''}">Tesztek</button></div>`;
+const mmss = s => { if (s == null || isNaN(s)) return '–'; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const hmm = s => { s = Math.round(s / 60); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const parseMMSS = v => { const m = String(v).trim().match(/^(\d+)[:.,](\d{1,2})$/); return m ? (+m[1]) * 60 + (+m[2]) : (/^\d+$/.test(String(v).trim()) ? +v * 60 : null); };
+const TESZT = {
+  ftp: { nev: 'FTP (bicikli)', egys: 'W', fmt: v => v + ' W', parse: v => Math.round(+v) || null, jobb: 1, ph: 'pl. 205' },
+  usz400: { nev: '400 m úszás', egys: 'perc:mp', fmt: mmss, parse: parseMMSS, jobb: -1, ph: 'pl. 9:30' },
+  fut5: { nev: '5 km futás', egys: 'perc:mp', fmt: mmss, parse: parseMMSS, jobb: -1, ph: 'pl. 24:10' }
+};
+function sparkSVG(l, jobb) {
+  if (l.length < 2) return '';
+  const W = 300, H = 60, vs = l.map(x => +x.v), mn = Math.min(...vs), mx = Math.max(...vs), r = mx - mn || 1;
+  const X = k => 8 + k * (W - 16) / (l.length - 1), Y = v => jobb > 0 ? 8 + (mx - v) * (H - 16) / r : 8 + (v - mn) * (H - 16) / r;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}"><path d="${l.map((x, k) => (k ? 'L' : 'M') + X(k).toFixed(1) + ' ' + Y(+x.v).toFixed(1)).join('')}" fill="none" stroke="#d71920" stroke-width="2"/>${l.map((x, k) => `<circle cx="${X(k)}" cy="${Y(+x.v)}" r="3.5" fill="#d71920"/>`).join('')}</svg>`;
+}
+function renderTesztek() {
+  const T = tests(), t = todayStr();
+  let html = '';
+  Object.entries(TESZT).forEach(([k, d]) => {
+    const l = (T[k] || []).slice().sort((x, y) => x.d < y.d ? -1 : 1);
+    const last = l[l.length - 1], first = l[0];
+    let diff = '';
+    if (l.length > 1) { const dv = (+last.v - +first.v) * d.jobb; diff = `<span class="tdiff ${dv >= 0 ? 'jo' : ''}">${dv >= 0 ? '▲' : '▼'} ${k === 'ftp' ? Math.abs(+last.v - +first.v) + ' W' : mmss(Math.abs(+last.v - +first.v))} az első óta</span>`; }
+    html += `<div class="card tcard"><div class="pn">${d.nev}</div>
+      <div class="tbig">${last ? d.fmt(+last.v) : '–'} ${diff}</div>
+      ${last ? `<div class="pmed">utolsó: ${fmtD(last.d)}</div>` : '<div class="pmed">még nincs eredmény</div>'}
+      ${sparkSVG(l, d.jobb)}
+      ${l.length ? `<div class="tlist">${l.slice().reverse().map(x => `<div class="tl2"><span>${fmtD(x.d)}</span><b>${d.fmt(+x.v)}</b><button data-tdel="${k}|${x.d}|${x.v}" aria-label="törlés">×</button></div>`).join('')}</div>` : ''}
+      <div class="tadd"><input type="date" id="td-${k}" value="${t}"><input type="text" id="tv-${k}" placeholder="${d.ph}" inputmode="${k === 'ftp' ? 'numeric' : 'text'}"><button class="btn" data-tadd="${k}">Hozzáad</button></div></div>`;
+  });
+  html += `<div class="muted" style="padding:8px 16px 16px">Az FTP-t a legutóbbi teszt alapján használja az alkalmazás a wattokhoz és a versenytervhez.</div>`;
+  return html;
+}
+const vdef = () => { const T = tests(), u = (T.usz400 || []).slice().sort((x, y) => x.d < y.d ? -1 : 1).pop(); return { pct: 75, seb: 27, usz: u ? Math.round(+u.v / 4 * 1.08) : 150, fut: 345, depo: 10, gel: 25 }; };
+function renderVerseny() {
+  const v = Object.assign(vdef(), entry('_verseny'));
+  const ftp = curFTP();
+  const sw = 19 * v.usz, bk = 90 / v.seb * 3600, rn = 21.0975 * v.fut, dp = v.depo * 60, tot = sw + bk + rn + dp;
+  const bh = bk / 3600, chLo = Math.round(bh * 60), chHi = Math.round(bh * 80), gels = Math.round(chLo / v.gel), fl = [Math.round(bh * 0.5 * 10) / 10, Math.round(bh * 0.75 * 10) / 10];
+  const cel = tot <= 6 * 3600 ? 'a 6:00 alatti tartományban' : tot <= 6.5 * 3600 ? 'a 6:00–6:30-as célon belül' : 'a 6:30-as cél fölött';
+  const inp = (id, lab, val, hint) => `<label class="vi"><span>${lab}</span><input type="text" data-vin="${id}" value="${esc(val)}" inputmode="decimal"><small>${hint || ''}</small></label>`;
+  let html = `<div class="card"><div class="pn">Becsült célidő</div><div class="tbig">${hmm(tot)}</div><div class="pmed">${cel} · a korcsoportos átlag kb. 6:00–6:30</div>
+    <table class="vt"><tr><td>Úszás 1,9 km</td><td>${mmss(v.usz)}/100 m</td><td>${hmm(sw)}</td></tr>
+    <tr><td>Bicikli 90 km</td><td>${v.seb} km/h${ftp ? ` · ${watts(v.pct - 2)}–${watts(v.pct + 2)} W` : ''}</td><td>${hmm(bk)}</td></tr>
+    <tr><td>Futás 21,1 km</td><td>${mmss(v.fut)}/km</td><td>${hmm(rn)}</td></tr>
+    <tr><td>Depók (T1+T2)</td><td></td><td>${hmm(dp)}</td></tr></table></div>`;
+  html += `<div class="card"><div class="pn">Bemenetek</div>
+    ${inp('usz', 'Úszótempó /100 m', mmss(v.usz), 'a 400 m-es tesztből számolva, ha van')}
+    ${inp('pct', 'Bicikli: % FTP', v.pct, ftp ? `FTP: ${ftp} W` : 'add meg az FTP-t a Tesztek fülön')}
+    ${inp('seb', 'Bicikli átlagsebesség (km/h)', v.seb, 'a hosszú tekerésekből becsüld')}
+    ${inp('fut', 'Futótempó /km', mmss(v.fut), 'bicikli után, Z2 felső széle körül')}
+    ${inp('depo', 'Depók összesen (perc)', v.depo, '')}
+    <button class="btn" id="vsave">Számolás és mentés</button></div>`;
+  html += `<div class="card"><div class="pn">Frissítés a versenyen</div>
+    <div class="pm" style="font-size:15px;color:var(--ink)">
+    <p><b>Bicikli (${hmm(bk)}):</b> óránként 60–80 g szénhidrát, összesen kb. ${chLo}–${chHi} g, ez kb. ${gels} db ${v.gel} g-os gél vagy ennek megfelelő ital/szelet. Folyadék óránként 0,5–0,75 l, összesen kb. ${String(fl[0]).replace('.', ',')}–${String(fl[1]).replace('.', ',')} l. Az első 15 percben csak igyál, utána 20–30 percenként egyél.</p>
+    <p><b>Futás (${hmm(rn)}):</b> 30–40 percenként egy gél vízzel, minden frissítőpontnál pár korty.</p>
+    <p class="muted" style="font-size:13px">Általános irányelv: a hosszú brickeken és a máj. 1-i versenyszimuláción próbáld ki, mi válik be neked.</p></div></div>`;
+  return html;
+}
 function renderHalad() {
+  if (hTab === 'teszt') { $('#main').innerHTML = segH() + renderTesztek(); return; }
+  if (hTab === 'verseny') { $('#main').innerHTML = segH() + renderVerseny(); return; }
   const t = todayStr();
   const all = allItems().filter(i => !isRest(i));
   const past = all.filter(i => eff(i) <= t);
   const done = all.filter(i => entry(i.id).k);
-  const days = Math.max(0, Math.round((parseD(plan.verseny) - parseD(t)) / 864e5));
-  let html = '';
+  let html = segH();
   html += `<div class="card"><b>Eddig</b><div class="bar"><i style="width:${past.length ? 100 * done.filter(i => eff(i) <= t).length / past.length : 0}%"></i></div>
     <div class="muted">${done.filter(i => eff(i) <= t).length} / ${past.length} esedékes edzés kész · összesen ${done.length} / ${all.length}</div></div>`;
   const sports = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi'];
@@ -552,6 +616,25 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const ht = e.target.closest('[data-htab]');
+  if (ht) { hTab = ht.dataset.htab; window.scrollTo(0, 0); render(); return; }
+  const ta = e.target.closest('[data-tadd]');
+  if (ta) {
+    const k = ta.dataset.tadd, v = TESZT[k].parse($('#tv-' + k).value), d = $('#td-' + k).value;
+    if (!v || !d) { $('#tv-' + k).focus(); return; }
+    const T = tests(), l = (T[k] || []).filter(x => x.d !== d).concat([{ d, v }]);
+    change('_tesztek', { [k]: l });
+    if (k === 'ftp') change('_beall', { ftp: v });
+    render(); return;
+  }
+  const td = e.target.closest('[data-tdel]');
+  if (td) { const [k, d, v] = td.dataset.tdel.split('|'); const l = (tests()[k] || []).filter(x => !(x.d === d && String(x.v) === v)); change('_tesztek', { [k]: l }); render(); return; }
+  if (e.target.id === 'vsave') {
+    const o = {};
+    document.querySelectorAll('[data-vin]').forEach(i => { const k = i.dataset.vin, raw = i.value; const v = (k === 'usz' || k === 'fut') ? parseMMSS(raw) : parseFloat(String(raw).replace(',', '.')); if (v && v > 0) o[k] = v; });
+    change('_verseny', o); render(); return;
+  }
+  if (e.target.closest('.vi,.tadd')) return;
   const hm = e.target.closest('[data-hmode]');
   if (hm) { hetMode = hm.dataset.hmode; render(); return; }
   const mo = e.target.closest('[data-mon]');
