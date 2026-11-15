@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '25';
+const APP_VERSION = '26';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -200,7 +200,7 @@ function augFTP(t) {
   return t.replace(/(\d+)(?:\s*[–-]\s*(\d+))?\s*% FTP/g, (m, x, y) => y ? `${m} (${watts(+x)}–${watts(+y)} W)` : `${m} (${watts(+x)} W)`);
 }
 function augTitle(i, t) {
-  if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/\bZ([12])\b/g, (m) => PZ()[m] ? `${m} (${PZ()[m]})` : m);
+  if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/Z1–Z2/g, 'Z1–Z2 (158 alatt)').replace(/\bZ([12])\b(?!–| \()/g, (m) => PZ()[m] ? `${m} (${PZ()[m]})` : m);
   if (i.sport === 'Bringa' && +beall().ftp) t = t.replace(/\bZ2\b/, `Z2 (${watts(56)}–${watts(75)} W)`);
   return augFTP(t);
 }
@@ -330,7 +330,8 @@ function renderHalad() {
   const sports = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi'];
   html += `<div class="card"><b>Sportáganként (eddig esedékes)</b><table>${sports.map(s => {
     const p = past.filter(i => i.sport === s), d = p.filter(i => entry(i.id).k);
-    return `<tr><td><span class="tag" style="--c:var(--${s})">${LABEL(s)}</span></td><td>${d.length} / ${p.length}</td></tr>`;
+    const fut = all.filter(i => i.sport === s && eff(i) >= t).length;
+    return `<tr class="sprow" data-sport="${s}"><td><span class="tag" style="--c:var(--${s})">${LABEL(s)}</span></td><td>${d.length} / ${p.length}</td><td class="muted sfut">még ${fut} ›</td></tr>`;
   }).join('')}</table></div>`;
   const wh = weeks().map(w => weekHours(w.het)), maxH = Math.max(...wh.map(x => Math.max(x.plan, x.done)), 60);
   html += `<div class="card"><b>Heti edzésidő</b><div class="muted legend"><i class="lg p"></i>terv <i class="lg d"></i>teljesítve (óra)</div>${weeks().map((w, k) => {
@@ -341,6 +342,15 @@ function renderHalad() {
   $('#main').innerHTML = html;
 }
 
+let sportSel = null;
+function renderSport() {
+  const t = todayStr(), s = sportSel;
+  const its = allItems().filter(i => i.sport === s && eff(i) >= t);
+  let html = `<div class="sphead"><button id="spback" aria-label="Vissza">‹</button><span class="tag" style="--c:var(--${s})">${esc(LABEL(s))}</span><span class="muted">${its.length} hátralévő edzés</span></div>`;
+  if (!its.length) html += `<div class="pz" style="padding:16px">Nincs több ilyen edzés a tervben.</div>`;
+  else groupByDay(its).forEach((a, d) => html += dayHTML(d, a));
+  $('#main').innerHTML = html;
+}
 function feelHTML() {
   const items = allItems().filter(i => !isRest(i));
   const cw = currentWeekIdx();
@@ -494,9 +504,9 @@ function render() {
   plan.edzesek.forEach((x, k) => ORD[x.id] = k);
   const dl = Math.round((parseD(plan.verseny) - parseD(todayStr())) / 864e5);
   $('#sub').innerHTML = dl > 0 ? `Még <b>${dl}</b> nap a versenyig` : dl === 0 ? '<b>Ma van a verseny!</b>' : 'IRONMAN 70.3 St. Pölten';
-  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === (view === 'sport' ? 'halad' : view)));
   const y = window.scrollY;
-  ({ ma: renderMa, het: renderHet, halad: renderHalad, uszoda: renderUszoda, info: renderInfo })[view]();
+  ({ ma: renderMa, het: renderHet, halad: renderHalad, sport: renderSport, uszoda: renderUszoda, info: renderInfo })[view]();
   if (y) window.scrollTo(0, y);
 }
 
@@ -515,6 +525,9 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const sp = e.target.closest('[data-sport]');
+  if (sp) { sportSel = sp.dataset.sport; view = 'sport'; openId = null; window.scrollTo(0, 0); render(); return; }
+  if (e.target.closest('#spback')) { view = 'halad'; window.scrollTo(0, 0); render(); return; }
   const ut = e.target.closest('[data-utab]');
   if (ut) { uTab = ut.dataset.utab; window.scrollTo(0, 0); render(); return; }
   const ud = e.target.closest('[data-uday]');
