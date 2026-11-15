@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '23';
+const APP_VERSION = '24';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -306,7 +306,6 @@ function renderHet() {
   const gw = garmin.hetek && garmin.hetek[wk.het];
   if (gw) html += `<div class="card"><h3 style="margin:0 0 4px;font-size:14px;color:var(--mute)">⌚ GARMIN-ÖSSZESÍTŐ</h3><div style="font-size:14px;white-space:pre-line">${esc(gw)}</div></div>`;
   const its = itemsOfWeek(wk.het);
-  html += `<div class="muted hint">Tipp: tartsd az ujjad egy edzésen, és húzd át másik napra.</div>`;
   if (wk.het === 0) html += dayHTML(H0()[0], its, H0()[0] === H0()[1] ? '' : `${fmtD(H0()[0])} – ${fmtD(H0()[1])} · bármelyik nap`);
   else { const g = groupByDay(its), mon = weekRange(wk.het)[0]; for (let k = 0; k < 7; k++) { const d = addDays(mon, k); html += dayHTML(d, g.get(d) || []); } }
   html += addHTML(weekRange(wk.het)[0] <= todayStr() && todayStr() <= weekRange(wk.het)[1] ? todayStr() : weekRange(wk.het)[0]);
