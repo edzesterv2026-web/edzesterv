@@ -1,4 +1,10 @@
 'use strict';
+const APP_VERSION = '16';
+async function checkUpdate() {
+  try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION) location.reload(); } catch (e) {}
+}
+checkUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
 const DEF = { owner: 'edzesterv2026-web', repo: 'edzesnaplo-adatok' };
 const REST = ['Pihenő', 'Utazás'];
 const NAPNEV = ['vasárnap', 'hétfő', 'kedd', 'szerda', 'csütörtök', 'péntek', 'szombat'];
