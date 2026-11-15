@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '19';
+const APP_VERSION = '20';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -262,7 +262,7 @@ function addHTML(defDate) {
   return `<div class="card addform"><h3>Edzés hozzáadása</h3>
     <label>Nap<select id="ad-d">${opts}</select></label>
     <label>Sportág<select id="ad-s">${sp}</select></label>
-    <label>Mit csináltál?<input type="text" id="ad-n" placeholder="pl. úszás apuval 1500 m"></label>
+    <label>Mit csináltál?<input type="text" id="ad-n" placeholder="pl. úszás 1500 m"></label>
     <label>Időtartam (perc)<input type="number" id="ad-p" inputmode="numeric" placeholder="45"></label>
     <label class="row"><input type="checkbox" id="ad-k" checked> Már megcsináltam</label>
     <div class="row"><button class="btn" id="ad-save">Mentés</button><button class="btn ghost" id="ad-cancel">Mégse</button></div></div>`;
