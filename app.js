@@ -248,7 +248,7 @@ function dayHTML(datum, its, label) {
 
 let addOpen = false;
 function addHTML(defDate) {
-  if (!addOpen) return `<div class="addwrap"><button class="btn ghost" id="addbtn">+ Edzés hozzáadása</button></div>`;
+  if (!addOpen) return `<div class="addwrap"><button id="addbtn" aria-label="Edzés hozzáadása"><svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>`;
   const d = parseD(defDate), mon = addDays(defDate, -((d.getDay() + 6) % 7));
   let opts = '';
   for (let k = -7; k < 7; k++) { const x = addDays(mon, k); if (x < '2026-11-14') continue; opts += `<option value="${x}" ${x === defDate ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
@@ -443,7 +443,7 @@ $('#main').addEventListener('click', e => {
   }
   const ud = e.target.closest('[data-uday]');
   if (ud) { uDay = ud.dataset.uday; render(); return; }
-  if (e.target.id === 'addbtn') { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
+  if (e.target.closest('#addbtn')) { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
   if (e.target.id === 'ad-cancel') { addOpen = false; render(); return; }
   if (e.target.id === 'ad-save') {
     const n = $('#ad-n').value.trim(); if (!n) { $('#ad-n').focus(); return; }
