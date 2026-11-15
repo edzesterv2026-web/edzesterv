@@ -200,18 +200,21 @@ nav button{padding:9px 10px 8px!important}
 .mk em{font-style:normal;font-size:12px;color:#fff;background:#d71920;border-radius:6px;padding:1px 6px}
 .lb{display:flex;gap:2px}.lb i{width:5px;height:18px;border-radius:2px;background:#e5e5ea}.lb i.f{background:var(--Úszás)}
 nav button span.ic{height:20px;display:flex;align-items:center}
+nav button{font-size:0!important;padding:12px 16px!important;gap:0!important}
+nav button span{font-size:22px}
+nav button span.ic svg{width:24px;height:22px}
 </style>
 </head>
 <body>
 <header><h1 id="title">Edzésterv</h1><div class="sub" id="sub">IRONMAN 70.3 St. Pölten</div><div id="sync"></div></header>
 <main id="main"></main>
 <nav id="nav">
-<button data-v="ma" class="on"><span>●</span>Ma</button>
-<button data-v="het"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M7 1.5c.6 0 1 .4 1 1V4h8V2.5c0-.6.4-1 1-1s1 .4 1 1V4h1.5C21 4 22 5 22 6.5v13c0 1.5-1 2.5-2.5 2.5h-15C3 22 2 21 2 19.5v-13C2 5 3 4 4.5 4H6V2.5c0-.6.4-1 1-1zM4 9.5v10c0 .3.2.5.5.5h15c.3 0 .5-.2.5-.5v-10H4zm2 2.5h2.5v2.2H6V12zm4.75 0h2.5v2.2h-2.5V12zm4.75 0H18v2.2h-2.5V12zM6 16h2.5v2.2H6V16zm4.75 0h2.5v2.2h-2.5V16zm4.75 0H18v2.2h-2.5V16z"/></svg></span>Hét</button>
-<button data-v="halad"><span>▲</span>Haladás</button>
-<button data-v="uszoda"><span class="ic"><svg width="22" height="20" viewBox="0 0 24 22" fill="currentColor" aria-hidden="true"><path d="M1 20V15C1 9 5 4 11.5 4c4.2 0 7.3 2.3 8.3 5.4.2.6-.4 1-.9.7-1-.7-2.2-1-3.4-.8-2.2.4-3.6 2.3-3.4 4.4.2 1.9 1.8 3.3 3.7 3.3 2.2 0 3.6-1.2 5.2-2.6.4-.3.9 0 .9.4V20c0 .6-.4 1-1 1H2c-.6 0-1-.4-1-1z"/></svg></span>Uszoda</button>
-<button data-v="info"><span>ⓘ</span>Fogalmak</button>
+<button data-v="ma" class="on" aria-label="Ma"><span>●</span>Ma</button>
+<button data-v="het" aria-label="Hét"><span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M7 1.5c.6 0 1 .4 1 1V4h8V2.5c0-.6.4-1 1-1s1 .4 1 1V4h1.5C21 4 22 5 22 6.5v13c0 1.5-1 2.5-2.5 2.5h-15C3 22 2 21 2 19.5v-13C2 5 3 4 4.5 4H6V2.5c0-.6.4-1 1-1zM4 9.5v10c0 .3.2.5.5.5h15c.3 0 .5-.2.5-.5v-10H4zm2 2.5h2.5v2.2H6V12zm4.75 0h2.5v2.2h-2.5V12zm4.75 0H18v2.2h-2.5V12zM6 16h2.5v2.2H6V16zm4.75 0h2.5v2.2h-2.5V16zm4.75 0H18v2.2h-2.5V16z"/></svg></span>Hét</button>
+<button data-v="halad" aria-label="Haladás"><span>▲</span>Haladás</button>
+<button data-v="uszoda" aria-label="Uszoda"><span class="ic"><svg width="22" height="20" viewBox="0 0 24 22" fill="currentColor" aria-hidden="true"><path d="M1 20V15C1 9 5 4 11.5 4c4.2 0 7.3 2.3 8.3 5.4.2.6-.4 1-.9.7-1-.7-2.2-1-3.4-.8-2.2.4-3.6 2.3-3.4 4.4.2 1.9 1.8 3.3 3.7 3.3 2.2 0 3.6-1.2 5.2-2.6.4-.3.9 0 .9.4V20c0 .6-.4 1-1 1H2c-.6 0-1-.4-1-1z"/></svg></span>Uszoda</button>
+<button data-v="info" aria-label="Fogalmak"><span>ⓘ</span>Fogalmak</button>
 </nav>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
