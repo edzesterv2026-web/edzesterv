@@ -105,13 +105,16 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ---------- plan helpers ---------- */
 function weeks() { return plan.hetek; }
-function itemsOfWeek(h) { return plan.edzesek.filter(i => i.het === h); }
+const eff = i => entry(i.id).d || i.datum;
+const ORD = {};
+function weekRange(h) { if (h === 0) return ['2026-11-14', '2026-11-15']; const mon = addDays('2026-11-16', 7 * (h - 1)); return [mon, addDays(mon, 6)]; }
+function sortEff(its) { return its.slice().sort((x, y) => eff(x) < eff(y) ? -1 : eff(x) > eff(y) ? 1 : ORD[x.id] - ORD[y.id]); }
+function itemsOfWeek(h) { const [s, e] = weekRange(h); return sortEff(plan.edzesek.filter(i => { const d = eff(i); return d >= s && d <= e; })); }
 function currentWeekIdx() {
   const t = todayStr();
   const w = weeks();
   for (let k = 0; k < w.length; k++) {
-    const its = itemsOfWeek(w[k].het);
-    const end = w[k].het === 0 ? '2026-11-15' : its[its.length - 1].datum;
+    const end = weekRange(w[k].het)[1];
     if (t <= end) return k;
   }
   return w.length - 1;
@@ -119,7 +122,7 @@ function currentWeekIdx() {
 function addDays(s, n) { const d = parseD(s); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function groupByDay(its) {
   const m = new Map();
-  its.forEach(i => { if (!m.has(i.datum)) m.set(i.datum, []); m.get(i.datum).push(i); });
+  sortEff(its).forEach(i => { const d = eff(i); if (!m.has(d)) m.set(d, []); m.get(d).push(i); });
   return m;
 }
 function weekStats(h) {
@@ -138,21 +141,32 @@ function shortName(i) {
   if (i.sport === 'Kondi') { const m = t.match(/^Kondi\s*\((.*)\)$/); if (m) t = m[1]; }
   return bike(t.charAt(0).toUpperCase() + t.slice(1));
 }
+function moveHTML(i) {
+  const cur = eff(i);
+  const d = parseD(cur), mon = addDays(cur, -((d.getDay() + 6) % 7));
+  let opts = '';
+  for (let k = 0; k < 7; k++) { const x = addDays(mon, k); opts += `<option value="${x}" ${x === cur ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
+  if (cur !== i.datum && (i.datum < mon || i.datum > addDays(mon, 6))) opts += `<option value="${i.datum}">${fmtD(i.datum)} (eredeti nap)</option>`;
+  return `<div class="move">Nap: <select data-move="${i.id}">${opts}</select>${cur !== i.datum ? ` <button data-reset="${i.id}">eredeti: ${fmtD(i.datum)}</button>` : ''}</div>`;
+}
 function itemHTML(i) {
   const e = entry(i.id);
   const rest = isRest(i);
   const g = garmin.edzesek && garmin.edzesek[i.id];
+  const moved = eff(i) !== i.datum;
   const cls = ['it', e.k ? 'done' : '', rest ? 'rest' : '', openId === i.id ? 'open' : ''].join(' ');
   const feel = [1, 2, 3, 4, 5].map(n => `<button data-feel="${n}" class="${e.e === n ? 'on' : ''}">${n}</button>`).join('');
   return `<div class="${cls}" data-id="${i.id}">
     <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.4l2.9 2.9 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</button>
     <div class="body" data-tog="${i.id}">
       ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : shortName(i))}</div>
+      ${moved && openId !== i.id ? `<div class="note">áthelyezve (eredetileg ${fmtD(i.datum)})</div>` : ''}
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g)}</div>` : ''}
       <div class="how">${esc(i.hogyan)}</div>
       ${rest ? '' : `<div class="extra">
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
+        ${moveHTML(i)}
         <textarea data-note="${i.id}" placeholder="Megjegyzés (pl. térd, pulzus, idő)">${esc(e.m || '')}</textarea>
       </div>`}
     </div></div>`;
@@ -161,7 +175,9 @@ function dayHTML(datum, its, label) {
   const t = todayStr();
   const d = parseD(datum);
   const title = label || (fmtD(datum) + ' – ' + NAPNEV[d.getDay()]);
-  return `<div class="card day ${datum === t ? 'today' : ''}"><h3>${esc(title)}</h3>${its.map(itemHTML).join('')}</div>`;
+  if (its.some(i => !isRest(i))) its = its.filter(i => i.sport !== 'Pihenő');
+  const body = its.length ? its.map(itemHTML).join('') : '<div class="it rest empty"><button class="chk"></button><div class="body"><div class="t">Nincs edzés</div></div></div>';
+  return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}</div>`;
 }
 
 function renderMa() {
@@ -170,15 +186,15 @@ function renderMa() {
   let html = '';
   const race = plan.verseny;
   const days = Math.round((parseD(race) - parseD(t)) / 864e5);
-  const today = its.filter(i => i.datum === t);
+  const today = sortEff(its.filter(i => eff(i) === t));
   if (today.length) html += dayHTML(t, today, fmtD(t) + ' – ' + NAPNEV[parseD(t).getDay()] + ' · ma');
   else if (t === '2026-11-15') html += dayHTML('2026-11-14', its.filter(i => i.het === 0), fmtD(t) + ' – vasárnap · ma (ha szombaton nem volt meg)');
   else html += `<div class="card"><h3 style="margin:0;font-size:14px;color:var(--mute)">MA</h3><div class="muted">Ma nincs edzés a tervben.</div></div>`;
   // következő napok
-  const next = [...groupByDay(its.filter(i => i.datum > t)).entries()].slice(0, 2);
+  const next = [...groupByDay(its.filter(i => eff(i) > t)).entries()].sort((x, y) => x[0] < y[0] ? -1 : 1).slice(0, 2);
   next.forEach(([d, a]) => html += dayHTML(d, a));
   // lemaradt edzések az elmúlt 7 napból
-  const missed = its.filter(i => !isRest(i) && i.datum < t && i.datum >= addDays(t, -7) && !entry(i.id).k);
+  const missed = sortEff(its.filter(i => !isRest(i) && eff(i) < t && eff(i) >= addDays(t, -7) && !entry(i.id).k));
   if (missed.length) html += `<div class="card day"><h3>Elmúlt 7 nap – nincs kipipálva</h3>${missed.map(itemHTML).join('')}</div>`;
   $('#main').innerHTML = html;
 }
@@ -198,20 +214,21 @@ function renderHet() {
   const gw = garmin.hetek && garmin.hetek[wk.het];
   if (gw) html += `<div class="card"><h3 style="margin:0 0 4px;font-size:14px;color:var(--mute)">⌚ GARMIN-ÖSSZESÍTŐ</h3><div style="font-size:14px;white-space:pre-line">${esc(gw)}</div></div>`;
   const its = itemsOfWeek(wk.het);
-  if (wk.het === 0) html += dayHTML(its[0].datum, its, 'szombat vagy vasárnap, nov. 14–15.');
-  else groupByDay(its).forEach((a, d) => html += dayHTML(d, a));
+  html += `<div class="muted hint">Tipp: tartsd az ujjad egy edzésen, és húzd át másik napra.</div>`;
+  if (wk.het === 0) html += dayHTML('2026-11-14', its, 'nov. 14–15. – szombat vagy vasárnap');
+  else { const g = groupByDay(its), mon = weekRange(wk.het)[0]; for (let k = 0; k < 7; k++) { const d = addDays(mon, k); html += dayHTML(d, g.get(d) || []); } }
   $('#main').innerHTML = html;
 }
 
 function renderHalad() {
   const t = todayStr();
   const all = plan.edzesek.filter(i => !isRest(i));
-  const past = all.filter(i => i.datum <= t);
+  const past = all.filter(i => eff(i) <= t);
   const done = all.filter(i => entry(i.id).k);
   const days = Math.max(0, Math.round((parseD(plan.verseny) - parseD(t)) / 864e5));
   let html = `<div class="card" style="text-align:center"><div class="big">${days}</div><div class="muted">nap a versenyig (máj. 23.)</div></div>`;
-  html += `<div class="card"><b>Eddig</b><div class="bar"><i style="width:${past.length ? 100 * done.filter(i => i.datum <= t).length / past.length : 0}%"></i></div>
-    <div class="muted">${done.filter(i => i.datum <= t).length} / ${past.length} esedékes edzés kész · összesen ${done.length} / ${all.length}</div></div>`;
+  html += `<div class="card"><b>Eddig</b><div class="bar"><i style="width:${past.length ? 100 * done.filter(i => eff(i) <= t).length / past.length : 0}%"></i></div>
+    <div class="muted">${done.filter(i => eff(i) <= t).length} / ${past.length} esedékes edzés kész · összesen ${done.length} / ${all.length}</div></div>`;
   const sports = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi'];
   html += `<div class="card"><b>Sportáganként (eddig esedékes)</b><table>${sports.map(s => {
     const p = past.filter(i => i.sport === s), d = p.filter(i => entry(i.id).k);
@@ -256,6 +273,7 @@ function renderSetup(msg) {
 
 function render() {
   if (!plan) return;
+  plan.edzesek.forEach((x, k) => ORD[x.id] = k);
   const dl = Math.round((parseD(plan.verseny) - parseD(todayStr())) / 864e5);
   $('#sub').innerHTML = dl > 0 ? `Még <b>${dl}</b> nap a versenyig` : dl === 0 ? '<b>Ma van a verseny!</b>' : 'IRONMAN 70.3 St. Pölten';
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
@@ -271,6 +289,7 @@ $('#nav').addEventListener('click', e => {
   openId = null; window.scrollTo(0, 0); render();
 });
 $('#main').addEventListener('click', e => {
+  if (Date.now() < noClickUntil) return;
   const chk = e.target.closest('[data-chk]');
   if (chk) {
     const id = chk.dataset.chk, cur = entry(id);
@@ -278,6 +297,9 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const rs = e.target.closest('[data-reset]');
+  if (rs) { change(rs.dataset.reset, { d: null }); render(); return; }
+  if (e.target.closest('select')) return;
   const f = e.target.closest('[data-feel]');
   if (f) { const id = f.closest('.it').dataset.id; change(id, { e: Number(f.dataset.feel) }); render(); return; }
   if (e.target.closest('textarea')) return;
@@ -288,6 +310,88 @@ $('#main').addEventListener('click', e => {
   const go = e.target.closest('[data-gowk]');
   if (go) { view = 'het'; weekIdx = Number(go.dataset.gowk); window.scrollTo(0, 0); render(); }
 });
+$('#main').addEventListener('change', e => {
+  const s = e.target.closest('[data-move]');
+  if (s) { moveTo(s.dataset.move, s.value); }
+});
+function moveTo(id, date) {
+  const it = plan.edzesek.find(x => x.id === id);
+  if (!it || date === eff(it)) return;
+  change(id, { d: date === it.datum ? null : date });
+  render();
+}
+
+/* ---------- húzás (hosszú nyomás) ---------- */
+let drag = null, noClickUntil = 0;
+const mainEl = $('#main');
+mainEl.addEventListener('touchstart', e => {
+  if (view !== 'het' || e.touches.length > 1) return;
+  const it = e.target.closest('.it[data-id]');
+  if (!it || it.classList.contains('rest') || e.target.closest('.chk,textarea,select,button,.extra')) return;
+  const t = e.touches[0];
+  drag = { it, id: it.dataset.id, x: t.clientX, y: t.clientY, on: false };
+  drag.timer = setTimeout(() => startDrag(), 450);
+}, { passive: true });
+mainEl.addEventListener('touchmove', e => {
+  if (!drag) return;
+  const t = e.touches[0];
+  if (!drag.on) {
+    if (Math.hypot(t.clientX - drag.x, t.clientY - drag.y) > 8) { clearTimeout(drag.timer); drag = null; }
+    return;
+  }
+  e.preventDefault();
+  drag.x = t.clientX; drag.y = t.clientY;
+  moveGhost();
+}, { passive: false });
+function endTouch() {
+  if (!drag) return;
+  clearTimeout(drag.timer);
+  if (drag.on) {
+    const target = dayAt(drag.x, drag.y);
+    cleanupDrag();
+    noClickUntil = Date.now() + 400;
+    if (target) moveTo(drag.id, target.dataset.date);
+  }
+  drag = null;
+}
+mainEl.addEventListener('touchend', endTouch);
+mainEl.addEventListener('touchcancel', () => { if (drag) { clearTimeout(drag.timer); if (drag.on) cleanupDrag(); drag = null; } });
+mainEl.addEventListener('contextmenu', e => { if (view === 'het' && e.target.closest('.it[data-id]')) e.preventDefault(); });
+function startDrag() {
+  if (!drag) return;
+  drag.on = true;
+  const r = drag.it.getBoundingClientRect();
+  const g = drag.it.cloneNode(true);
+  g.classList.add('ghost'); g.classList.remove('open');
+  g.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px`;
+  document.body.appendChild(g);
+  drag.ghost = g; drag.off = drag.y - r.top;
+  drag.it.classList.add('dragging');
+  document.body.classList.add('dragmode');
+  if (navigator.vibrate) navigator.vibrate(15);
+  moveGhost();
+}
+function dayAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest('.day[data-date]') : null;
+}
+function moveGhost() {
+  drag.ghost.style.top = (drag.y - drag.off) + 'px';
+  const d = dayAt(drag.x, drag.y);
+  document.querySelectorAll('.day.drop').forEach(x => { if (x !== d) x.classList.remove('drop'); });
+  if (d) d.classList.add('drop');
+  clearInterval(drag.scroll);
+  const edge = drag.y < 120 ? -10 : drag.y > window.innerHeight - 130 ? 10 : 0;
+  if (edge) drag.scroll = setInterval(() => { window.scrollBy(0, edge); if (drag) { const d2 = dayAt(drag.x, drag.y); document.querySelectorAll('.day.drop').forEach(x => x.classList.remove('drop')); if (d2) d2.classList.add('drop'); } }, 16);
+}
+function cleanupDrag() {
+  clearInterval(drag.scroll);
+  if (drag.ghost) drag.ghost.remove();
+  drag.it.classList.remove('dragging');
+  document.body.classList.remove('dragmode');
+  document.querySelectorAll('.day.drop').forEach(x => x.classList.remove('drop'));
+}
+
 $('#main').addEventListener('input', e => {
   if (e.target.dataset.note) {
     const id = e.target.dataset.note;
