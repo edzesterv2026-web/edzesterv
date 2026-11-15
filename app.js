@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '26';
+const APP_VERSION = '27';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -297,13 +297,40 @@ function renderMa() {
   $('#main').innerHTML = html;
 }
 
+let hetMode = 'het', mSel = null, mDay = null;
+const HONAPNEV = ['január', 'február', 'március', 'április', 'május', 'június', 'július', 'augusztus', 'szeptember', 'október', 'november', 'december'];
+const modeHTML = () => `<div class="vmode"><button data-hmode="het" class="${hetMode === 'het' ? 'on' : ''}">Hét</button><span>·</span><button data-hmode="honap" class="${hetMode === 'honap' ? 'on' : ''}">Hónap</button></div>`;
+function renderMonth() {
+  const t = todayStr();
+  if (!mSel) mSel = t.slice(0, 7);
+  if (!mDay) mDay = t;
+  const [y, m] = mSel.split('-').map(Number);
+  const first = new Date(y, m - 1, 1), off = (first.getDay() + 6) % 7, days = new Date(y, m, 0).getDate();
+  const g = groupByDay(allItems());
+  let html = modeHTML() + `<div class="wkhead"><button data-mon="-1">‹</button><div class="ttl">${y}. ${HONAPNEV[m - 1]}</div><button data-mon="1">›</button></div>`;
+  html += `<div class="mgrid">${['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'].map(d => `<div class="mh">${d}</div>`).join('')}`;
+  for (let k = 0; k < off; k++) html += `<div></div>`;
+  for (let d = 1; d <= days; d++) {
+    const ds = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const its = (g.get(ds) || []).filter(i => !isRest(i));
+    const dots = its.slice(0, 4).map(i => `<i class="${entry(i.id).k ? 'k' : ''}" style="--c:var(--${i.sport})"></i>`).join('');
+    html += `<button class="md ${ds === t ? 'today' : ''} ${ds === mDay ? 'sel' : ''}" data-mday="${ds}"><b>${d}</b><span class="dots">${dots}</span></button>`;
+  }
+  html += `</div>`;
+  const di = g.get(mDay) || [];
+  html += dayHTML(mDay, di);
+  const until = addDays(mDay, 42);
+  [...g.entries()].filter(([d]) => d > mDay && d <= until).sort((x, y) => x[0] < y[0] ? -1 : 1).forEach(([d, its]) => html += dayHTML(d, its));
+  $('#main').innerHTML = html;
+}
 function renderHet() {
+  if (hetMode === 'honap') return renderMonth();
   const w = weeks();
   if (weekIdx == null) weekIdx = currentWeekIdx();
   const wk = w[weekIdx];
   const st = weekStats(wk.het);
   const parts = wk.cim.split(' · ');
-  let html = `<div class="wkhead"><button data-wk="-1" ${weekIdx === 0 ? 'disabled' : ''}>‹</button>
+  let html = modeHTML() + `<div class="wkhead"><button data-wk="-1" ${weekIdx === 0 ? 'disabled' : ''}>‹</button>
     <div class="ttl">${esc(parts[0])}<small>${esc(parts.slice(1).join(' · '))}</small></div>
     <button data-wk="1" ${weekIdx === w.length - 1 ? 'disabled' : ''}>›</button></div>`;
   html += `<div class="bar"><i style="width:${st.total ? 100 * st.done / st.total : 0}%"></i></div>
@@ -525,6 +552,12 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  const hm = e.target.closest('[data-hmode]');
+  if (hm) { hetMode = hm.dataset.hmode; render(); return; }
+  const mo = e.target.closest('[data-mon]');
+  if (mo) { const [y, m] = mSel.split('-').map(Number); const d = new Date(y, m - 1 + Number(mo.dataset.mon), 1); mSel = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); render(); return; }
+  const md = e.target.closest('[data-mday]');
+  if (md) { mDay = md.dataset.mday; openId = null; render(); return; }
   const sp = e.target.closest('[data-sport]');
   if (sp) { sportSel = sp.dataset.sport; view = 'sport'; openId = null; window.scrollTo(0, 0); render(); return; }
   if (e.target.closest('#spback')) { view = 'halad'; window.scrollTo(0, 0); render(); return; }
