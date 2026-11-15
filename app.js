@@ -109,7 +109,14 @@ const eff = i => entry(i.id).d || i.datum;
 const ORD = {};
 function weekRange(h) { if (h === 0) return ['2026-11-14', '2026-11-15']; const mon = addDays('2026-11-16', 7 * (h - 1)); return [mon, addDays(mon, 6)]; }
 function sortEff(its) { return its.slice().sort((x, y) => eff(x) < eff(y) ? -1 : eff(x) > eff(y) ? 1 : ORD[x.id] - ORD[y.id]); }
-function itemsOfWeek(h) { const [s, e] = weekRange(h); return sortEff(plan.edzesek.filter(i => { const d = eff(i); return d >= s && d <= e; })); }
+function extras() {
+  const keys = new Set(Object.keys(log).concat(Object.keys(pend)).filter(k => k.startsWith('x-')));
+  const out = [];
+  keys.forEach(k => { const e = entry(k); if (!e.del && e.datum) { out.push({ id: k, datum: e.datum, sport: e.sport || 'Egyéb', edzes: e.edzes || 'Edzés', hogyan: e.hogyan || '', perc: e.perc, extra: true }); ORD[k] = 1e6 + Number(k.slice(2)) / 1e6; } });
+  return out;
+}
+function allItems() { return plan.edzesek.concat(extras()); }
+function itemsOfWeek(h) { const [s, e] = weekRange(h); return sortEff(allItems().filter(i => { const d = eff(i); return d >= s && d <= e; })); }
 function currentWeekIdx() {
   const t = todayStr();
   const w = weeks();
@@ -125,6 +132,46 @@ function groupByDay(its) {
   sortEff(its).forEach(i => { const d = eff(i); if (!m.has(d)) m.set(d, []); m.get(d).push(i); });
   return m;
 }
+const FALLBACK = { Kondi: 40, Úszás: 45, Futás: 40, Bringa: 60, Brick: 75, Egyéb: 30, Verseny: 330 };
+function parseMins(t, standaloneOnly) {
+  let sum = 0, found = false;
+  t = t.replace(/\d+:\d{2}(?:\s*[–-]\s*\d+:\d{2})?\s*\/\s*km/g, ' ');
+  t = t.replace(/(\d+):(\d{2})(?:\s*[–-]\s*(\d+):(\d{2}))?(?!\s*\/\s*km)(?![\d])/g, (m, h, mm, h2, mm2) => {
+    let v = (+h) * 60 + (+mm); if (h2) v = (v + (+h2) * 60 + (+mm2)) / 2; sum += v; found = true; return ' ';
+  });
+  if (!standaloneOnly) {
+    let lastN = 0;
+    t = t.replace(/(\d+)×(\d+)'/g, (m, n, x) => { sum += n * x; lastN = +n; found = true; return ' '; });
+    t = t.replace(/(\d+)×(\d+)\s*m\b/g, (m, n, x) => { sum += n * x / 1000 * 5.5; lastN = +n; found = true; return ' '; });
+    t = t.replace(/(\d+)×1\s*km/g, (m, n) => { sum += n * 5.5; lastN = +n; found = true; return ' '; });
+    t = t.replace(/közte (\d+)(?:[–-](\d+))?\s*(?:'|mp)/g, (m, x, y, off, str) => { const v = y ? (+x + +y) / 2 : +x; if (!/mp$/.test(m)) sum += Math.max(0, lastN - 1) * v; else sum += Math.max(0, lastN - 1) * v / 60; return ' '; });
+  } else {
+    t = t.replace(/\d+×\d+'/g, ' ');
+  }
+  t.replace(/(?<![×\d])(\d+)(?:\s*[–-]\s*(\d+))?'/g, (m, x, y) => { sum += y ? (+x + +y) / 2 : +x; found = true; return ''; });
+  return found ? sum : null;
+}
+function planMins(i) {
+  if (i.perc) return +i.perc;
+  if (isRest(i) || i.sport === 'Utazás') return 0;
+  if (i.sport === 'Kondi') return 40;
+  let v = parseMins(i.edzes, true);
+  if (v == null && /×/.test(i.edzes)) v = parseMins(i.hogyan, false);
+  if (v == null && /FTP-teszt/.test(i.edzes)) v = 60;
+  if (/Versenyszimul/.test(i.edzes)) v = 225;
+  return v == null ? (FALLBACK[i.sport] || 30) : v;
+}
+function gmOf(id) { const g = garmin.edzesek && garmin.edzesek[id]; if (!g) return null; return typeof g === 'string' ? { s: g } : g; }
+function doneMins(i) { if (!entry(i.id).k) return 0; const g = gmOf(i.id); return g && g.perc ? +g.perc : planMins(i); }
+function gmExtras(d) { return (garmin.extra || []).filter(x => x.datum === d); }
+const hrs = m => (Math.round(m / 6) / 10).toString().replace('.', ',');
+function weekHours(h) {
+  const its = itemsOfWeek(h); const [s, e] = weekRange(h);
+  let plan_ = 0, done = 0;
+  its.forEach(i => { if (!i.extra) plan_ += planMins(i); done += doneMins(i); });
+  (garmin.extra || []).forEach(x => { if (x.datum >= s && x.datum <= e && x.perc) done += +x.perc; });
+  return { plan: plan_, done };
+}
 function weekStats(h) {
   const its = itemsOfWeek(h).filter(i => !isRest(i));
   const done = its.filter(i => entry(i.id).k).length;
@@ -132,9 +179,22 @@ function weekStats(h) {
 }
 
 /* ---------- rendering ---------- */
+const beall = () => entry('_beall');
+const PULZ = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '167–176' };
+function watts(p) { const f = +beall().ftp; return f ? Math.round(f * p / 100) : null; }
+function augFTP(t) {
+  if (!+beall().ftp) return t;
+  return t.replace(/(\d+)(?:\s*[–-]\s*(\d+))?\s*% FTP/g, (m, x, y) => y ? `${m} (${watts(+x)}–${watts(+y)} W)` : `${m} (${watts(+x)} W)`);
+}
+function augTitle(i, t) {
+  if (i.sport === 'Futás' || i.sport === 'Brick') t = t.replace(/\bZ([12])\b/g, (m) => `${m} (${PULZ[m]})`);
+  if (i.sport === 'Bringa' && +beall().ftp) t = t.replace(/\bZ2\b/, `Z2 (${watts(56)}–${watts(75)} W)`);
+  return augFTP(t);
+}
 const LABEL = s => s === 'Bringa' ? 'Bicikli' : s;
 const bike = t => t.replace(/Bringa/g, 'Bicikli').replace(/bringa/g, 'bicikli');
 function shortName(i) {
+  if (i.extra) return bike(i.edzes);
   let t = i.edzes;
   const pre = { Brick: /^Bringa:\s+/, Bringa: /^Bringa:?\s+/, Futás: /^Futás:?\s+/, Úszás: /^Úszás:?\s+/ }[i.sport];
   if (pre && pre.test(t)) t = t.replace(pre, '');
@@ -152,22 +212,24 @@ function moveHTML(i) {
 function itemHTML(i) {
   const e = entry(i.id);
   const rest = isRest(i);
-  const g = garmin.edzesek && garmin.edzesek[i.id];
+  const g = gmOf(i.id);
   const moved = eff(i) !== i.datum;
   const cls = ['it', e.k ? 'done' : '', rest ? 'rest' : '', openId === i.id ? 'open' : ''].join(' ');
   const feel = [1, 2, 3, 4, 5].map(n => `<button data-feel="${n}" class="${e.e === n ? 'on' : ''}">${n}</button>`).join('');
   return `<div class="${cls}" data-id="${i.id}">
     <button class="chk" data-chk="${i.id}" aria-label="kész">${e.k ? '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7.4l2.9 2.9 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}</button>
     <div class="body" data-tog="${i.id}">
-      ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : shortName(i))}</div>
+      ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(rest ? i.edzes : augTitle(i, shortName(i)))}</div>
       ${moved && openId !== i.id ? `<div class="note">áthelyezve (eredetileg ${fmtD(i.datum)})</div>` : ''}
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
-      ${g ? `<div class="gm">⌚ ${esc(g)}</div>` : ''}
-      <div class="how">${esc(i.hogyan)}</div>
+      ${g ? `<div class="gm">⌚ ${esc(g.s)}</div>` : ''}
+      <div class="how">${esc(augFTP(i.hogyan))}</div>
       ${rest ? `<div class="extra">${moveHTML(i)}</div>` : `<div class="extra">
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
+        <div class="feel knee">Térd: ${['rendben', 'érzem', 'fáj'].map((l, n) => `<button data-knee="${n}" class="${e.tr === n ? 'on' : ''}">${l}</button>`).join('')}</div>
         ${moveHTML(i)}
-        <textarea data-note="${i.id}" placeholder="Megjegyzés (pl. térd, pulzus, idő)">${esc(e.m || '')}</textarea>
+        <textarea data-note="${i.id}" placeholder="Megjegyzés (pl. pulzus, idő, érzés)">${esc(e.m || '')}</textarea>
+        ${i.extra ? `<button class="del" data-del="${i.id}">Edzés törlése</button>` : ''}
       </div>`}
     </div></div>`;
 }
@@ -177,12 +239,28 @@ function dayHTML(datum, its, label) {
   const title = label || (fmtD(datum) + ' – ' + NAPNEV[d.getDay()]);
   if (its.some(i => !isRest(i))) its = its.filter(i => i.sport !== 'Pihenő' || entry(i.id).d);
   const body = its.length ? its.map(itemHTML).join('') : '<div class="it rest empty"><button class="chk"></button><div class="body"><div class="t">Nincs edzés</div></div></div>';
-  return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}</div>`;
+  const gx = gmExtras(datum).map(x => `<div class="gmx">⌚ Terven kívül (Garmin): ${esc(x.s)}</div>`).join('');
+  return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}${gx}</div>`;
 }
 
+let addOpen = false;
+function addHTML(defDate) {
+  if (!addOpen) return `<div class="addwrap"><button class="btn ghost" id="addbtn">+ Edzés hozzáadása</button></div>`;
+  const d = parseD(defDate), mon = addDays(defDate, -((d.getDay() + 6) % 7));
+  let opts = '';
+  for (let k = -7; k < 7; k++) { const x = addDays(mon, k); if (x < '2026-11-14') continue; opts += `<option value="${x}" ${x === defDate ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
+  const sp = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi', 'Egyéb'].map(s => `<option value="${s}">${LABEL(s)}</option>`).join('');
+  return `<div class="card addform"><h3>Edzés hozzáadása</h3>
+    <label>Nap<select id="ad-d">${opts}</select></label>
+    <label>Sportág<select id="ad-s">${sp}</select></label>
+    <label>Mit csináltál?<input type="text" id="ad-n" placeholder="pl. úszás apuval 1500 m"></label>
+    <label>Időtartam (perc)<input type="number" id="ad-p" inputmode="numeric" placeholder="45"></label>
+    <label class="row"><input type="checkbox" id="ad-k" checked> Már megcsináltam</label>
+    <div class="row"><button class="btn" id="ad-save">Mentés</button><button class="btn ghost" id="ad-cancel">Mégse</button></div></div>`;
+}
 function renderMa() {
   const t = todayStr();
-  const its = plan.edzesek;
+  const its = allItems();
   let html = '';
   const race = plan.verseny;
   const days = Math.round((parseD(race) - parseD(t)) / 864e5);
@@ -196,6 +274,7 @@ function renderMa() {
   // lemaradt edzések az elmúlt 7 napból
   const missed = sortEff(its.filter(i => !isRest(i) && eff(i) < t && eff(i) >= addDays(t, -7) && !entry(i.id).k));
   if (missed.length) html += `<div class="card day"><h3>Elmúlt 7 nap – nincs kipipálva</h3>${missed.map(itemHTML).join('')}</div>`;
+  html += addHTML(t);
   $('#main').innerHTML = html;
 }
 
@@ -209,7 +288,7 @@ function renderHet() {
     <div class="ttl">${esc(parts[0])}<small>${esc(parts.slice(1).join(' · '))}</small></div>
     <button data-wk="1" ${weekIdx === w.length - 1 ? 'disabled' : ''}>›</button></div>`;
   html += `<div class="bar"><i style="width:${st.total ? 100 * st.done / st.total : 0}%"></i></div>
-    <div class="muted" style="margin:0 4px 10px">${st.done} / ${st.total} edzés kész</div>`;
+    <div class="muted" style="margin:0 4px 10px">${st.done} / ${st.total} edzés kész · ${hrs(weekHours(wk.het).done)} / kb. ${hrs(weekHours(wk.het).plan)} óra</div>`;
   if (wk.megj) html += `<div class="wmegj">${esc(wk.megj)}</div>`;
   const gw = garmin.hetek && garmin.hetek[wk.het];
   if (gw) html += `<div class="card"><h3 style="margin:0 0 4px;font-size:14px;color:var(--mute)">⌚ GARMIN-ÖSSZESÍTŐ</h3><div style="font-size:14px;white-space:pre-line">${esc(gw)}</div></div>`;
@@ -217,16 +296,17 @@ function renderHet() {
   html += `<div class="muted hint">Tipp: tartsd az ujjad egy edzésen, és húzd át másik napra.</div>`;
   if (wk.het === 0) html += dayHTML('2026-11-14', its, 'nov. 14–15. – szombat vagy vasárnap');
   else { const g = groupByDay(its), mon = weekRange(wk.het)[0]; for (let k = 0; k < 7; k++) { const d = addDays(mon, k); html += dayHTML(d, g.get(d) || []); } }
+  html += addHTML(weekRange(wk.het)[0] <= todayStr() && todayStr() <= weekRange(wk.het)[1] ? todayStr() : weekRange(wk.het)[0]);
   $('#main').innerHTML = html;
 }
 
 function renderHalad() {
   const t = todayStr();
-  const all = plan.edzesek.filter(i => !isRest(i));
+  const all = allItems().filter(i => !isRest(i));
   const past = all.filter(i => eff(i) <= t);
   const done = all.filter(i => entry(i.id).k);
   const days = Math.max(0, Math.round((parseD(plan.verseny) - parseD(t)) / 864e5));
-  let html = `<div class="card" style="text-align:center"><div class="big">${days}</div><div class="muted">nap a versenyig (máj. 23.)</div></div>`;
+  let html = '';
   html += `<div class="card"><b>Eddig</b><div class="bar"><i style="width:${past.length ? 100 * done.filter(i => eff(i) <= t).length / past.length : 0}%"></i></div>
     <div class="muted">${done.filter(i => eff(i) <= t).length} / ${past.length} esedékes edzés kész · összesen ${done.length} / ${all.length}</div></div>`;
   const sports = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi'];
@@ -234,19 +314,44 @@ function renderHalad() {
     const p = past.filter(i => i.sport === s), d = p.filter(i => entry(i.id).k);
     return `<tr><td><span class="tag" style="--c:var(--${s})">${LABEL(s)}</span></td><td>${d.length} / ${p.length}</td></tr>`;
   }).join('')}</table></div>`;
-  html += `<div class="card"><b>Hetek</b>${weeks().map((w, k) => {
-    const st = weekStats(w.het);
-    return `<div class="wkrow" data-gowk="${k}"><span>${esc(w.cim.split(' · ')[0])}</span><div class="bar"><i style="width:${st.total ? 100 * st.done / st.total : 0}%"></i></div><span class="muted">${st.done}/${st.total}</span></div>`;
+  const wh = weeks().map(w => weekHours(w.het)), maxH = Math.max(...wh.map(x => Math.max(x.plan, x.done)), 60);
+  html += `<div class="card"><b>Heti edzésidő</b><div class="muted legend"><i class="lg p"></i>terv <i class="lg d"></i>teljesítve (óra)</div>${weeks().map((w, k) => {
+    const x = wh[k];
+    return `<div class="wkrow" data-gowk="${k}"><span class="wn">${w.het}. hét</span><div class="hb"><i class="p" style="width:${100 * x.plan / maxH}%"></i><i class="d" style="width:${100 * x.done / maxH}%"></i></div><span class="muted hv">${hrs(x.done)} / ${hrs(x.plan)}</span></div>`;
   }).join('')}</div>`;
+  html += feelHTML();
   $('#main').innerHTML = html;
 }
 
+function feelHTML() {
+  const items = allItems().filter(i => !isRest(i));
+  const cw = currentWeekIdx();
+  const ws = weeks().slice(0, cw + 1);
+  const pts = ws.map(w => { const es = itemsOfWeek(w.het).map(i => entry(i.id)).filter(e => e.e); return es.length ? es.reduce((s, e) => s + e.e, 0) / es.length : null; });
+  const kn = ws.map(w => itemsOfWeek(w.het).map(i => entry(i.id).tr || 0).reduce((m, v) => Math.max(m, v), 0));
+  const W = 320, H = 130, n = Math.max(ws.length, 2), X = k => 20 + k * (W - 30) / (n - 1), Y = v => 12 + (5 - v) * (H - 40) / 4;
+  let path = '', dots = '';
+  pts.forEach((v, k) => { if (v != null) { path += (path ? 'L' : 'M') + X(k).toFixed(1) + ' ' + Y(v).toFixed(1); dots += `<circle cx="${X(k)}" cy="${Y(v)}" r="3.5" fill="#d71920"/>`; } });
+  const knee = kn.map((v, k) => v ? `<circle cx="${X(k)}" cy="${H - 8}" r="${v === 2 ? 6 : 4}" fill="${v === 2 ? '#d71920' : '#e8a33d'}"/>` : '').join('');
+  const grid = [1, 3, 5].map(v => `<line x1="14" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="0" y="${Y(v) + 4}" font-size="10" fill="var(--mute)">${v}</text>`).join('');
+  const notes = items.map(i => ({ i, e: entry(i.id) })).filter(x => x.e.m || x.e.tr).sort((a, b) => eff(a.i) < eff(b.i) ? 1 : -1).slice(0, 10);
+  return `<div class="card"><b>Érzés és térd</b><div class="muted legend">piros vonal: heti átlagos érzés (1 nehéz – 5 könnyű) · alul: <span style="color:#e8a33d">●</span> térd érzem, <span style="color:#d71920">●</span> fáj</div>
+    ${pts.some(v => v != null) || kn.some(v => v) ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}<path d="${path}" fill="none" stroke="#d71920" stroke-width="2"/>${dots}${knee}</svg>` : '<div class="muted" style="padding:8px 0">Még nincs értékelt edzés. Kipipáláskor add meg, hogy ment, és hogy érezted-e a térdedet.</div>'}
+    ${notes.length ? `<div class="notes">${notes.map(x => `<div class="nrow"><span class="muted">${fmtD(eff(x.i))}</span> <b>${esc(LABEL(x.i.sport))}</b> ${x.e.tr ? `<span class="kn k${x.e.tr}">térd: ${['rendben', 'érzem', 'fáj'][x.e.tr]}</span>` : ''}${x.e.m ? `<div>${esc(x.e.m)}</div>` : ''}</div>`).join('')}</div>` : ''}</div>`;
+}
 function renderInfo() {
   let html = `<div class="card"><b>Fogalmak</b><table>${plan.fogalmak.map(f => `<tr><th style="width:38%">${esc(f.f)}</th><td>${esc(f.j)}</td></tr>`).join('')}</table></div>`;
+  const b = beall();
+  html += `<div class="card"><b>FTP és pulzuszónák</b>
+    <label class="muted">FTP (watt) – a Zwift-teszt eredménye</label><input type="number" id="ftp" inputmode="numeric" value="${esc(b.ftp || '')}" placeholder="pl. 210">
+    <button class="btn" id="ftpsave">Mentés</button>
+    ${+b.ftp ? `<table style="margin-top:10px"><tr><th>Bicikli Z2 (56–75%)</th><td>${watts(56)}–${watts(75)} W</td></tr><tr><th>Sweet spot (88–94%)</th><td>${watts(88)}–${watts(94)} W</td></tr><tr><th>Küszöb (95–100%)</th><td>${watts(95)}–${watts(100)} W</td></tr><tr><th>Versenytempó (75–80%)</th><td>${watts(75)}–${watts(80)} W</td></tr></table>` : ''}
+    <table style="margin-top:10px"><tr><th>Futás Z1</th><td>150 alatt</td></tr><tr><th>Futás Z2</th><td>150–158</td></tr><tr><th>Tempó</th><td>159–166</td></tr><tr><th>Küszöb</th><td>167–176</td></tr></table></div>`;
   html += `<div class="card"><b>Beállítások</b><div class="muted" style="margin:6px 0">Terv frissítve: ${esc(plan.frissitve || '')}${garmin.frissitve ? ' · Garmin-ellenőrzés: ' + esc(garmin.frissitve) : ''}</div>
     <button class="btn ghost" id="reload">Frissítés most</button> <button class="btn ghost" id="reset">Kulcs cseréje</button></div>`;
   $('#main').innerHTML = html;
   $('#reload').onclick = () => loadRemote();
+  $('#ftpsave').onclick = () => { const v = Math.round(+$('#ftp').value); change('_beall', { ftp: v > 50 && v < 600 ? v : null }); render(); };
   $('#reset').onclick = () => renderSetup();
 }
 
@@ -297,6 +402,19 @@ $('#main').addEventListener('click', e => {
     if (!cur.k) openId = id;
     render(); return;
   }
+  if (e.target.id === 'addbtn') { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
+  if (e.target.id === 'ad-cancel') { addOpen = false; render(); return; }
+  if (e.target.id === 'ad-save') {
+    const n = $('#ad-n').value.trim(); if (!n) { $('#ad-n').focus(); return; }
+    const id = 'x-' + Date.now(), k = $('#ad-k').checked, p = Math.round(+$('#ad-p').value) || null;
+    change(id, { datum: $('#ad-d').value, sport: $('#ad-s').value, edzes: n, perc: p, k, t: k ? new Date().toISOString() : undefined });
+    addOpen = false; render(); return;
+  }
+  if (e.target.closest('.addform')) return;
+  const del = e.target.closest('[data-del]');
+  if (del) { change(del.dataset.del, { del: true }); openId = null; render(); return; }
+  const kb = e.target.closest('[data-knee]');
+  if (kb) { const id = kb.closest('.it').dataset.id, v = Number(kb.dataset.knee); change(id, { tr: entry(id).tr === v ? 0 : v }); render(); return; }
   const rs = e.target.closest('[data-reset]');
   if (rs) { change(rs.dataset.reset, { d: null }); render(); return; }
   if (e.target.closest('select')) return;
@@ -315,7 +433,7 @@ $('#main').addEventListener('change', e => {
   if (s) { moveTo(s.dataset.move, s.value); }
 });
 function moveTo(id, date) {
-  const it = plan.edzesek.find(x => x.id === id);
+  const it = allItems().find(x => x.id === id);
   if (!it || date === eff(it)) return;
   change(id, { d: date === it.datum ? null : date });
   render();
@@ -362,7 +480,7 @@ function startDrag() {
   drag.on = true;
   const r = drag.it.getBoundingClientRect();
   const g = drag.it.cloneNode(true);
-  g.classList.add('ghost'); g.classList.remove('open');
+  g.classList.add('dragghost'); g.classList.remove('open');
   g.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px`;
   document.body.appendChild(g);
   drag.ghost = g; drag.off = drag.y - r.top;
