@@ -270,7 +270,7 @@ function addHTML(defDate) {
   const d = parseD(defDate), mon = addDays(defDate, -((d.getDay() + 6) % 7));
   let opts = '';
   for (let k = -7; k < 7; k++) { const x = addDays(mon, k); if (x < H0()[0]) continue; opts += `<option value="${x}" ${x === defDate ? 'selected' : ''}>${fmtD(x)} – ${NAPNEV[parseD(x).getDay()]}</option>`; }
-  const sp = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi', 'Egyéb'].map(s => `<option value="${s}">${LABEL(s)}</option>`).join('');
+  const sp = ['Úszás', 'Bringa', 'Futás', 'Brick', 'Kondi', 'Pihenő', 'Egyéb'].map(s => `<option value="${s}">${LABEL(s)}</option>`).join('');
   return `<div class="card addform"><h3>Edzés hozzáadása</h3>
     <label>Nap<select id="ad-d">${opts}</select></label>
     <label>Sportág<select id="ad-s">${sp}</select></label>
