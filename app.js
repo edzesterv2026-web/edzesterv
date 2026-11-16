@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '30';
+const APP_VERSION = '31';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -127,7 +127,7 @@ function extras() {
   keys.forEach(k => { const e = entry(k); if (!e.del && e.datum) { out.push({ id: k, datum: e.datum, sport: e.sport || 'Egyéb', edzes: e.edzes || 'Edzés', hogyan: e.hogyan || '', perc: e.perc, extra: true }); ORD[k] = 1e6 + Number(k.slice(2)) / 1e6; } });
   return out;
 }
-function allItems() { return plan.edzesek.concat(extras()); }
+function allItems() { return plan.edzesek.filter(x => !entry(x.id).del).concat(extras()); }
 function itemsOfWeek(h) { const [s, e] = weekRange(h); return sortEff(allItems().filter(i => { const d = eff(i); return d >= s && d <= e; })); }
 function currentWeekIdx() {
   const t = todayStr();
@@ -659,7 +659,7 @@ $('#main').addEventListener('click', e => {
   }
   if (e.target.closest('.addform')) return;
   const del = e.target.closest('[data-del]');
-  if (del) { change(del.dataset.del, { del: true }); openId = null; render(); return; }
+  if (del) { deleteItem(del.dataset.del); return; }
   const kb = e.target.closest('[data-knee]');
   if (kb) { const id = kb.closest('.it').dataset.id, v = Number(kb.dataset.knee); change(id, { tr: entry(id).tr === v ? 0 : v }); render(); return; }
   const rr = e.target.closest('[data-renreset]');
@@ -696,14 +696,23 @@ let undoStack = ls.get('undo', []);
 function undoMove() {
   const u = undoStack.pop(); ls.set('undo', undoStack);
   if (!u) return render();
+  if (u.del) change(u.id, { del: null });
   const it = allItems().find(x => x.id === u.id);
   if (!it) return undoMove();
-  change(u.id, { d: u.d && u.d !== it.datum ? u.d : null });
-  const to = u.d || it.datum;
+  if (!u.del) change(u.id, { d: u.d && u.d !== it.datum ? u.d : null });
+  const to = u.del ? eff(it) : u.d || it.datum;
   if (view === 'het') { const w = weeks(); const k = w.findIndex(x => { const [a, b] = weekRange(x.het); return to >= a && to <= b; }); if (k >= 0) weekIdx = k; }
   render();
   const el = document.querySelector(`.it[data-id="${CSS.escape(u.id)}"]`);
   if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
+}
+function deleteItem(id) {
+  undoStack.push({ id, del: true });
+  if (undoStack.length > 20) undoStack.shift();
+  ls.set('undo', undoStack);
+  change(id, { del: true });
+  if (openId === id) openId = null;
+  render();
 }
 function showUndo() {
   let b = $('#undo');
@@ -716,18 +725,22 @@ function showUndo() {
 let drag = null, noClickUntil = 0;
 const mainEl = $('#main');
 mainEl.addEventListener('touchstart', e => {
-  if (view !== 'het' || e.touches.length > 1) return;
+  if (e.touches.length > 1) return;
+  if (swOpen && !e.target.closest('.swdel')) closeSwipe();
   const it = e.target.closest('.it[data-id]');
-  if (!it || it.classList.contains('empty') || e.target.closest('.chk,textarea,select,button,.extra')) return;
+  if (!it || it.classList.contains('empty') || e.target.closest('.chk,textarea,select,button,input,.extra')) return;
   const t = e.touches[0];
-  drag = { it, id: it.dataset.id, x: t.clientX, y: t.clientY, on: false };
-  drag.timer = setTimeout(() => startDrag(), 450);
+  drag = { it, id: it.dataset.id, x: t.clientX, y: t.clientY, x0: t.clientX, y0: t.clientY, on: false };
+  if (view === 'het') drag.timer = setTimeout(() => startDrag(), 450);
 }, { passive: true });
 mainEl.addEventListener('touchmove', e => {
   if (!drag) return;
   const t = e.touches[0];
+  if (drag.sw) { e.preventDefault(); drag.it.classList.add('swnow'); setSwipe(drag.it, Math.min(SW_W + 30, Math.max(0, drag.x0 - t.clientX))); return; }
   if (!drag.on) {
-    if (Math.hypot(t.clientX - drag.x, t.clientY - drag.y) > 8) { clearTimeout(drag.timer); drag = null; }
+    const dx = t.clientX - drag.x0, dy = t.clientY - drag.y0;
+    if (dx < -10 && Math.abs(dx) > Math.abs(dy) * 1.3) { clearTimeout(drag.timer); drag.sw = true; e.preventDefault(); drag.it.classList.add('swnow'); setSwipe(drag.it, -dx); return; }
+    if (Math.hypot(dx, dy) > 8) { clearTimeout(drag.timer); drag = null; }
     return;
   }
   e.preventDefault();
@@ -737,6 +750,13 @@ mainEl.addEventListener('touchmove', e => {
 function endTouch() {
   if (!drag) return;
   clearTimeout(drag.timer);
+  if (drag.sw) {
+    drag.it.classList.remove('swnow');
+    const w = parseFloat(drag.it.style.getPropertyValue('--sw')) || 0;
+    noClickUntil = Date.now() + 400;
+    if (w >= SW_W * 0.55) { setSwipe(drag.it, SW_W); swOpen = drag.it; } else setSwipe(drag.it, 0);
+    drag = null; return;
+  }
   if (drag.on) {
     const target = dayAt(drag.x, drag.y);
     cleanupDrag();
@@ -746,8 +766,24 @@ function endTouch() {
   drag = null;
 }
 mainEl.addEventListener('touchend', endTouch);
-mainEl.addEventListener('touchcancel', () => { if (drag) { clearTimeout(drag.timer); if (drag.on) cleanupDrag(); drag = null; } });
+mainEl.addEventListener('touchcancel', () => { if (drag && drag.sw) { drag.it.classList.remove('swnow'); setSwipe(drag.it, 0); drag = null; return; } if (drag) { clearTimeout(drag.timer); if (drag.on) cleanupDrag(); drag = null; } });
 mainEl.addEventListener('contextmenu', e => { if (view === 'het' && e.target.closest('.it[data-id]')) e.preventDefault(); });
+/* ---------- törlés balra húzással ---------- */
+const SW_W = 92;
+let swOpen = null;
+function setSwipe(it, w) {
+  let b = it.querySelector(':scope > .swdel');
+  if (!b) { b = document.createElement('button'); b.className = 'swdel'; b.dataset.swdel = it.dataset.id; b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>Törlés</span>'; it.appendChild(b); }
+  it.classList.toggle('swiping', w > 0);
+  it.style.setProperty('--sw', w + 'px');
+  if (!w) { setTimeout(() => { if (it.style.getPropertyValue('--sw') === '0px') { b.remove(); it.classList.remove('swiping'); } }, 200); if (swOpen === it) swOpen = null; }
+}
+function closeSwipe() { if (swOpen) setSwipe(swOpen, 0); swOpen = null; }
+mainEl.addEventListener('click', e => {
+  const b = e.target.closest('[data-swdel]');
+  if (b) { e.stopPropagation(); swOpen = null; deleteItem(b.dataset.swdel); }
+}, true);
+
 function startDrag() {
   if (!drag) return;
   drag.on = true;
