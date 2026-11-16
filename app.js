@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '29';
+const APP_VERSION = '30';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -258,7 +258,7 @@ function dayHTML(datum, its, label) {
   const t = todayStr();
   const d = parseD(datum);
   const title = label || (fmtD(datum) + ' – ' + NAPNEV[d.getDay()]);
-  if (its.some(i => !isRest(i))) its = its.filter(i => i.sport !== 'Pihenő' || entry(i.id).d);
+  if (its.some(i => !isRest(i) && eff(i) === i.datum)) its = its.filter(i => i.sport !== 'Pihenő' || entry(i.id).d);
   const body = its.length ? its.map(itemHTML).join('') : '<div class="it rest empty"><button class="chk"></button><div class="body"><div class="t">Nincs edzés</div></div></div>';
   const gx = gmExtras(datum).map(x => `<div class="gmx">⌚ Terven kívül (Garmin): ${esc(x.s)}</div>`).join('');
   return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}${gx}</div>`;
@@ -599,6 +599,7 @@ function render() {
   const y = window.scrollY;
   ({ ma: renderMa, het: renderHet, halad: renderHalad, sport: renderSport, uszoda: renderUszoda, info: renderInfo })[view]();
   if (y) window.scrollTo(0, y);
+  showUndo();
 }
 
 /* ---------- events ---------- */
@@ -684,8 +685,31 @@ $('#main').addEventListener('change', e => {
 function moveTo(id, date) {
   const it = allItems().find(x => x.id === id);
   if (!it || date === eff(it)) return;
+  undoStack.push({ id, d: entry(id).d || null });
+  if (undoStack.length > 20) undoStack.shift();
+  ls.set('undo', undoStack);
   change(id, { d: date === it.datum ? null : date });
   render();
+}
+/* ---------- visszavonás (legutóbbi 20 áthelyezés) ---------- */
+let undoStack = ls.get('undo', []);
+function undoMove() {
+  const u = undoStack.pop(); ls.set('undo', undoStack);
+  if (!u) return render();
+  const it = allItems().find(x => x.id === u.id);
+  if (!it) return undoMove();
+  change(u.id, { d: u.d && u.d !== it.datum ? u.d : null });
+  const to = u.d || it.datum;
+  if (view === 'het') { const w = weeks(); const k = w.findIndex(x => { const [a, b] = weekRange(x.het); return to >= a && to <= b; }); if (k >= 0) weekIdx = k; }
+  render();
+  const el = document.querySelector(`.it[data-id="${CSS.escape(u.id)}"]`);
+  if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
+}
+function showUndo() {
+  let b = $('#undo');
+  if (!b) { b = document.createElement('button'); b.id = 'undo'; b.addEventListener('click', undoMove); document.body.appendChild(b); }
+  b.style.display = undoStack.length ? '' : 'none';
+  b.innerHTML = `↶ Vissza <small>(${undoStack.length})</small>`;
 }
 
 /* ---------- húzás (hosszú nyomás) ---------- */
