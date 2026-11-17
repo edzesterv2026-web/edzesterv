@@ -122,8 +122,9 @@ textarea{-webkit-user-select:text;user-select:text}
 body.dragmode{overflow:hidden}
 .day.drop h3{background:rgba(215,25,32,.10)}
 .day.drop{box-shadow:inset 3px 0 0 #d71920}
-#undo{position:fixed;right:14px;bottom:calc(72px + env(safe-area-inset-bottom));z-index:7;border:0;border-radius:22px;padding:10px 16px;background:#d71920;color:#fff;font-size:15px;font-weight:600;box-shadow:0 6px 18px rgba(0,0,0,.22)}
-#undo small{font-weight:400;opacity:.85}
+#sync{display:flex;align-items:center;gap:10px}
+#syncst{font-size:17px;font-weight:700}
+#undo{border:0;border-radius:16px;padding:5px 14px;background:#d71920;color:#fff;display:flex;align-items:center;cursor:pointer}
 .it.swiping{position:relative;overflow:hidden}
 .it.swiping > :not(.swdel){transform:translateX(calc(-1 * var(--sw,0px)));transition:transform .18s ease}
 .it.swiping .swdel{position:absolute;top:0;bottom:0;right:0;width:var(--sw,0px);transition:width .18s ease;border:0;margin:0;padding:0;background:#d71920;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13px;font-weight:600;overflow:hidden;white-space:nowrap;border-radius:0}
@@ -247,7 +248,7 @@ nav button span.ic svg{width:24px;height:22px}
 </style>
 </head>
 <body>
-<header><h1 id="title">Edzésterv</h1><div class="sub" id="sub">IRONMAN 70.3 St. Pölten</div><div id="sync"></div></header>
+<header><h1 id="title">Edzésterv</h1><div class="sub" id="sub">IRONMAN 70.3 St. Pölten</div><div id="sync"><span id="syncst"></span><button id="undo" aria-label="Visszavonás" style="display:none"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 3.5v4.5h4.5"/></svg></button></div></header>
 <main id="main"></main>
 <nav id="nav">
 <button data-v="ma" class="on" aria-label="Ma"><span>●</span>Ma</button>

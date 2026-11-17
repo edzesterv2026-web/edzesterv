@@ -35,7 +35,7 @@ const fmtD = s => { const d = parseD(s); return HONAP[d.getMonth()] + ' ' + d.ge
 const entry = id => Object.assign({}, log[id] || {}, pend[id] || {});
 const isRest = it => REST.includes(it.sport);
 
-function setSync(t) { $('#sync').textContent = t; }
+function setSync(t) { $('#syncst').textContent = t; }
 
 /* ---------- GitHub ---------- */
 function b64dec(b64) {
@@ -103,7 +103,7 @@ async function flush(retry = 0) {
     log = merged; ls.set('log', log);
     for (const id in sending) if (JSON.stringify(pend[id]) === JSON.stringify(sending[id])) delete pend[id];
     ls.set('pend', pend);
-    setSync(Object.keys(pend).length ? 'mentésre vár' : '✓ mentve');
+    setSync(Object.keys(pend).length ? 'mentésre vár' : '✓');
     if (Object.keys(pend).length) flushTimer = setTimeout(flush, 800);
   } catch (e) {
     if ((e.status === 409 || e.status === 422) && retry < 3) return flush(retry + 1);
@@ -715,10 +715,9 @@ function deleteItem(id) {
   render();
 }
 function showUndo() {
-  let b = $('#undo');
-  if (!b) { b = document.createElement('button'); b.id = 'undo'; b.addEventListener('click', undoMove); document.body.appendChild(b); }
+  const b = $('#undo');
+  if (!b.dataset.on) { b.dataset.on = 1; b.addEventListener('click', undoMove); }
   b.style.display = undoStack.length ? '' : 'none';
-  b.innerHTML = `↶ Vissza <small>(${undoStack.length})</small>`;
 }
 
 /* ---------- húzás (hosszú nyomás) ---------- */
