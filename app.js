@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '33';
+const APP_VERSION = '34';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -559,19 +559,13 @@ function renderInfo() {
     <button class="btn" id="ftpsave">Mentés</button>
     ${+b.ftp ? `<table style="margin-top:10px"><tr><th>Bicikli Z2 (56–75%)</th><td>${watts(56)}–${watts(75)} W</td></tr><tr><th>Sweet spot (88–94%)</th><td>${watts(88)}–${watts(94)} W</td></tr><tr><th>Küszöb (95–100%)</th><td>${watts(95)}–${watts(100)} W</td></tr><tr><th>Versenytempó (75–80%)</th><td>${watts(75)}–${watts(80)} W</td></tr></table>` : ''}
     <table style="margin-top:10px">${Object.entries(PZ()).map(([k, v]) => `<tr><th>Futás ${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>`;
-  html += `<div class="card"><b>Strava-szinkron</b><div class="muted" style="margin:6px 0">${garmin.strava ? 'Utolsó szinkron: ' + esc(garmin.strava) + '. Óránként frissül, az elvégzett edzések automatikusan kipipálódnak.' : 'Még nincs összekapcsolva. Óránként behúzza a Strava-edzéseket, és kipipálja a napi edzést.'}</div>
-    <label class="muted">Strava Client ID</label><input type="text" id="sid" inputmode="numeric" value="${esc(ls.get('stravaId', ''))}" placeholder="pl. 123456">
-    <button class="btn" id="sconn">${garmin.strava ? 'Újracsatlakozás' : 'Összekapcsolás'}</button>
-    <label class="muted" style="margin-top:10px">Strava-kód (csak ha az app kérte)</label><input type="text" id="scodein" autocapitalize="off" autocorrect="off">
-    <button class="btn ghost" id="scodesend">Kód beküldése</button></div>`;
+  html += `<div class="card"><b>Automatikus szinkron</b><div class="muted" style="margin:6px 0">${garmin.szinkron ? 'Utolsó szinkron: ' + esc(garmin.szinkron) + '. Óránként (6–23 óra) behúzza az Intervals.icu-ból a Garmin- és Zwift-edzéseket, és kipipálja a napi edzést.' : 'Még nincs bekapcsolva.'}</div></div>`;
   html += `<div class="card"><b>Beállítások</b><div class="muted" style="margin:6px 0">Terv frissítve: ${esc(plan.frissitve || '')}${garmin.frissitve ? ' · Garmin-ellenőrzés: ' + esc(garmin.frissitve) : ''}</div>
     <button class="btn ghost" id="reload">Frissítés most</button> <button class="btn ghost" id="reset">Kulcs cseréje</button></div>`;
   $('#main').innerHTML = html;
   $('#reload').onclick = () => loadRemote();
   $('#ftpsave').onclick = () => { const v = Math.round(+$('#ftp').value); change('_beall', { ftp: v > 50 && v < 600 ? v : null }); render(); };
   $('#reset').onclick = () => renderSetup();
-  $('#sconn').onclick = stravaAuth;
-  $('#scodesend').onclick = async () => { const c = $('#scodein').value.trim(); if (!c) return; try { await stravaSend(c); alert('Strava összekapcsolva! Az első szinkron pár percen belül lefut.'); $('#scodein').value = ''; } catch (e) { alert('Nem sikerült elküldeni, próbáld újra.'); } };
 }
 
 function renderSetup(msg) {
@@ -595,34 +589,6 @@ function renderSetup(msg) {
   };
 }
 
-
-/* ---------- Strava-összekapcsolás ---------- */
-const APP_URL = location.origin + location.pathname;
-function stravaAuth() {
-  const id = ($('#sid').value || '').trim();
-  if (!/^\d+$/.test(id)) { alert('Írd be a Strava API-alkalmazásod azonosítóját (Client ID, csak számok).'); return; }
-  ls.set('stravaId', id);
-  location.href = `https://www.strava.com/oauth/authorize?client_id=${id}&response_type=code&redirect_uri=${encodeURIComponent(APP_URL)}&approval_prompt=force&scope=activity:read_all`;
-}
-async function stravaSend(code) {
-  let sha; try { sha = (await gh('strava_code.json?t=' + Date.now())).sha; } catch (e) {}
-  await gh('strava_code.json', { method: 'PUT', body: { message: 'Strava összekapcsolás', content: b64enc(JSON.stringify({ code })), sha } });
-}
-async function stravaCallback() {
-  const q = new URLSearchParams(location.search);
-  const code = q.get('code');
-  if (!code && !q.get('error')) return false;
-  history.replaceState(null, '', APP_URL);
-  if (q.get('error') || !(q.get('scope') || '').includes('activity:read')) { alert('A Strava-kapcsolathoz engedélyezni kell a tevékenységek olvasását is. Próbáld újra.'); return false; }
-  if (cfg && cfg.token) {
-    try { await stravaSend(code); alert('Strava összekapcsolva! Az első szinkron pár percen belül lefut.'); return false; } catch (e) {}
-  }
-  $('#nav').style.display = 'none';
-  $('#main').innerHTML = `<div class="card"><b>Már majdnem kész</b><p class="muted">Másold ki ezt a kódot, nyisd meg az Edzésterv appot, és az Infó fülön illeszd be a „Strava-kód” mezőbe. A kód pár percig érvényes.</p>
-    <input type="text" id="scode" value="${esc(code)}" readonly><button class="btn" id="scopy">Kód másolása</button></div>`;
-  $('#scopy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText(code); $('#scopy').textContent = 'Kimásolva ✓'; };
-  return true;
-}
 
 function showPoolTab() { const b = document.querySelector('nav button[data-v="uszoda"]'); if (b) b.style.display = uszi ? '' : 'none'; }
 function render() {
@@ -882,7 +848,5 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => {});
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) location.reload(); });
 }
-stravaCallback().then(stop => { if (stop) return;
 if (!cfg || !cfg.token) renderSetup();
 else { if (plan) render(); else $('#main').innerHTML = '<div class="muted" style="padding:20px">Betöltés…</div>'; loadRemote(); }
-});
