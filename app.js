@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '35';
+const APP_VERSION = '36';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -654,7 +654,7 @@ $('#main').addEventListener('click', e => {
   if (e.target.closest('#addbtn')) { addOpen = true; render(); setTimeout(() => { const f = $('.addform'); if (f) f.scrollIntoView({ block: 'center' }); }, 50); return; }
   if (e.target.id === 'ad-cancel') { addOpen = false; render(); return; }
   if (e.target.id === 'ad-save') {
-    const n = $('#ad-n').value.trim(); if (!n) { $('#ad-n').focus(); return; }
+    const n = $('#ad-n').value.trim() || ($('#ad-s').value === 'Pihenő' ? 'Pihenő' : ''); if (!n) { $('#ad-n').focus(); return; }
     const id = 'x-' + Date.now(), k = $('#ad-k').checked, p = Math.round(+$('#ad-p').value) || null;
     change(id, { datum: $('#ad-d').value, sport: $('#ad-s').value, edzes: n, perc: p, k, t: k ? new Date().toISOString() : undefined });
     addOpen = false; render(); return;
