@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '36';
+const APP_VERSION = '37';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -224,6 +224,8 @@ function moveHTML(i) {
   if (cur !== i.datum && (i.datum < mon || i.datum > addDays(mon, 6))) opts += `<option value="${i.datum}">${fmtD(i.datum)} (eredeti nap)</option>`;
   return `<div class="move">Nap: <select data-move="${i.id}">${opts}</select>${cur !== i.datum ? ` <button data-reset="${i.id}">eredeti: ${fmtD(i.datum)}</button>` : ''}</div>`;
 }
+let editId = null;
+function howOf(i) { const e = entry(i.id); return e.h != null ? e.h : (i.hogyan || ''); }
 function dispName(i) { const e = entry(i.id); if (e.n) return e.n; return isRest(i) ? i.edzes : augTitle(i, shortName(i)); }
 function renHTML(i) {
   const e = entry(i.id), orig = isRest(i) ? i.edzes : shortName(i);
@@ -243,7 +245,7 @@ function itemHTML(i) {
       ${moved && openId !== i.id ? `<div class="note">áthelyezve (eredetileg ${fmtD(i.datum)})</div>` : ''}
       ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g.s)}</div>` : ''}
-      <div class="how">${esc(augFTP(i.hogyan))}</div>
+      ${editId === i.id ? `<div class="hedit"><textarea data-hedit="${i.id}" rows="4">${esc(howOf(i))}</textarea><div class="hbtns"><button class="btn" data-hsave="${i.id}">Mentés</button><button class="btn ghost" data-hcancel="1">Mégse</button>${e.h != null && !i.extra ? `<button class="btn ghost" data-hreset="${i.id}">Eredeti</button>` : ''}</div></div>` : `<div class="how">${esc(augFTP(howOf(i)))}</div>`}
       ${rest ? `<div class="extra">${renHTML(i)}${moveHTML(i)}</div>` : `<div class="extra">
         ${renHTML(i)}
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
@@ -672,6 +674,11 @@ $('#main').addEventListener('click', e => {
   if (e.target.closest('select')) return;
   const f = e.target.closest('[data-feel]');
   if (f) { const id = f.closest('.it').dataset.id; change(id, { e: Number(f.dataset.feel) }); render(); return; }
+  const hs = e.target.closest('[data-hsave]');
+  if (hs) { const id = hs.dataset.hsave, it = allItems().find(x => x.id === id), v = $(`[data-hedit="${id}"]`).value.trim(); change(id, { h: it && !it.extra && v === (it.hogyan || '') ? null : v }); editId = null; openId = id; render(); return; }
+  if (e.target.closest('[data-hcancel]')) { editId = null; render(); return; }
+  const hr = e.target.closest('[data-hreset]');
+  if (hr) { change(hr.dataset.hreset, { h: null }); editId = null; render(); return; }
   if (e.target.closest('textarea')) return;
   const tog = e.target.closest('[data-tog]');
   if (tog) { openId = openId === tog.dataset.tog ? null : tog.dataset.tog; render(); return; }
@@ -727,7 +734,7 @@ let drag = null, noClickUntil = 0;
 const mainEl = $('#main');
 mainEl.addEventListener('touchstart', e => {
   if (e.touches.length > 1) return;
-  if (swOpen && !e.target.closest('.swdel')) closeSwipe();
+  if (swOpen && !e.target.closest('.swact')) closeSwipe();
   const it = e.target.closest('.it[data-id]');
   if (!it || it.classList.contains('empty') || e.target.closest('.chk,textarea,select,button,input,.extra')) return;
   const t = e.touches[0];
@@ -770,11 +777,15 @@ mainEl.addEventListener('touchend', endTouch);
 mainEl.addEventListener('touchcancel', () => { if (drag && drag.sw) { drag.it.classList.remove('swnow'); setSwipe(drag.it, 0); drag = null; return; } if (drag) { clearTimeout(drag.timer); if (drag.on) cleanupDrag(); drag = null; } });
 mainEl.addEventListener('contextmenu', e => { if (view === 'het' && e.target.closest('.it[data-id]')) e.preventDefault(); });
 /* ---------- törlés balra húzással ---------- */
-const SW_W = 92;
+const SW_W = 160;
 let swOpen = null;
 function setSwipe(it, w) {
-  let b = it.querySelector(':scope > .swdel');
-  if (!b) { b = document.createElement('button'); b.className = 'swdel'; b.dataset.swdel = it.dataset.id; b.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>Törlés</span>'; it.appendChild(b); }
+  let b = it.querySelector(':scope > .swact');
+  if (!b) {
+    b = document.createElement('div'); b.className = 'swact';
+    b.innerHTML = `<button class="swedit" data-swedit="${it.dataset.id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg><span>Leírás</span></button><button class="swdel" data-swdel="${it.dataset.id}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg><span>Törlés</span></button>`;
+    it.appendChild(b);
+  }
   it.classList.toggle('swiping', w > 0);
   it.style.setProperty('--sw', w + 'px');
   if (!w) { setTimeout(() => { if (it.style.getPropertyValue('--sw') === '0px') { b.remove(); it.classList.remove('swiping'); } }, 200); if (swOpen === it) swOpen = null; }
@@ -782,7 +793,9 @@ function setSwipe(it, w) {
 function closeSwipe() { if (swOpen) setSwipe(swOpen, 0); swOpen = null; }
 mainEl.addEventListener('click', e => {
   const b = e.target.closest('[data-swdel]');
-  if (b) { e.stopPropagation(); swOpen = null; deleteItem(b.dataset.swdel); }
+  if (b) { e.stopPropagation(); swOpen = null; deleteItem(b.dataset.swdel); return; }
+  const ed = e.target.closest('[data-swedit]');
+  if (ed) { e.stopPropagation(); noClickUntil = Date.now() + 300; swOpen = null; editId = ed.dataset.swedit; openId = editId; render(); setTimeout(() => { const t = $(`[data-hedit="${editId}"]`); if (t) t.focus(); }, 50); }
 }, true);
 
 function startDrag() {
