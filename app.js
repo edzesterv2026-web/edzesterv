@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '37';
+const APP_VERSION = '38';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -263,7 +263,7 @@ function dayHTML(datum, its, label) {
   if (its.some(i => !isRest(i) && eff(i) === i.datum)) its = its.filter(i => i.sport !== 'Pihenő' || entry(i.id).d);
   const body = its.length ? its.map(itemHTML).join('') : '<div class="it rest empty"><button class="chk"></button><div class="body"><div class="t">Nincs edzés</div></div></div>';
   const gx = gmExtras(datum).map(x => `<div class="gmx">⌚ Terven kívül (Garmin): ${esc(x.s)}</div>`).join('');
-  return `<div class="card day ${datum === t ? 'today' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}${gx}</div>`;
+  return `<div class="card day ${datum === t ? 'today' : datum < t ? 'past' : ''}" data-date="${datum}"><h3>${esc(title)}</h3>${body}${gx}</div>`;
 }
 
 let addOpen = false;
@@ -291,12 +291,6 @@ function renderMa() {
   if (today.length) html += dayHTML(t, today, fmtD(t) + ' – ' + NAPNEV[parseD(t).getDay()] + ' · ma');
   else if (t > H0()[0] && t <= H0()[1] && its.some(i => i.het === 0 && !entry(i.id).k)) html += dayHTML(H0()[0], its.filter(i => i.het === 0), fmtD(t) + ' · ma (a 0. hét edzései)');
   else html += `<div class="card"><h3 style="margin:0;font-size:14px;color:var(--mute)">MA</h3><div class="muted">Ma nincs edzés a tervben.</div></div>`;
-  // következő napok
-  const next = [...groupByDay(its.filter(i => eff(i) > t)).entries()].sort((x, y) => x[0] < y[0] ? -1 : 1).slice(0, 2);
-  next.forEach(([d, a]) => html += dayHTML(d, a));
-  // lemaradt edzések az elmúlt 7 napból
-  const missed = sortEff(its.filter(i => !isRest(i) && eff(i) < t && eff(i) >= addDays(t, -7) && !entry(i.id).k));
-  if (missed.length) html += `<div class="card day"><h3>Elmúlt 7 nap – nincs kipipálva</h3>${missed.map(itemHTML).join('')}</div>`;
   html += addHTML(t);
   $('#main').innerHTML = html;
 }
@@ -347,6 +341,16 @@ function renderHet() {
   else { const g = groupByDay(its), mon = weekRange(wk.het)[0]; for (let k = 0; k < 7; k++) { const d = addDays(mon, k); html += dayHTML(d, g.get(d) || []); } }
   html += addHTML(weekRange(wk.het)[0] <= todayStr() && todayStr() <= weekRange(wk.het)[1] ? todayStr() : weekRange(wk.het)[0]);
   $('#main').innerHTML = html;
+  if (scrollToday) { scrollToday = false; requestAnimationFrame(goToday); }
+}
+let scrollToday = true;
+function goToday() {
+  const el = $(`.day[data-date="${todayStr()}"]`); if (!el) return;
+  const h = $('header'), hh = h && getComputedStyle(h).position === 'sticky' ? h.offsetHeight : 0;
+  const top = Math.max(0, el.getBoundingClientRect().top + window.scrollY - hh - 4);
+  const need = top + window.innerHeight - document.documentElement.scrollHeight;
+  if (need > 0) { const s = document.createElement('div'); s.style.height = need + 'px'; $('#main').appendChild(s); }
+  window.scrollTo(0, top);
 }
 
 let hTab = 'att';
@@ -609,7 +613,7 @@ function render() {
 /* ---------- events ---------- */
 $('#nav').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  view = b.dataset.v; if (view === 'het') weekIdx = currentWeekIdx();
+  view = b.dataset.v; if (view === 'het') { weekIdx = currentWeekIdx(); scrollToday = true; }
   openId = null; window.scrollTo(0, 0); render();
 });
 $('#main').addEventListener('click', e => {
