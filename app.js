@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '41';
+const APP_VERSION = '42';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -249,7 +249,7 @@ function itemHTML(i) {
       ${rest ? `<div class="extra">${renHTML(i)}${moveHTML(i)}</div>` : `<div class="extra">
         ${renHTML(i)}
         <div class="feel">Hogy ment? ${feel}<span style="margin-left:auto;font-size:12px">1 nehéz · 5 könnyű</span></div>
-        <div class="feel knee">Térd: ${['rendben', 'érzem', 'fáj'].map((l, n) => `<button data-knee="${n}" class="${e.tr === n ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="feel knee">Térd: ${[1, 2, 3, 4, 5].map(n => `<button data-knee="${n}" class="${kneeOf(e) === n ? 'on' : ''}">${n}</button>`).join('')}<span style="margin-left:auto;font-size:12px">1 nem fáj · 5 nagyon fáj</span></div>
         ${moveHTML(i)}
         <textarea data-note="${i.id}" placeholder="Megjegyzés (pl. pulzus, idő, érzés)">${esc(e.m || '')}</textarea>
         ${i.extra ? `<button class="del" data-del="${i.id}">Edzés törlése</button>` : ''}
@@ -448,21 +448,23 @@ function renderSport() {
   else groupByDay(its).forEach((a, d) => html += dayHTML(d, a));
   $('#main').innerHTML = html;
 }
+function kneeOf(e) { return e.tf || (e.tr === 1 ? 3 : e.tr === 2 ? 5 : 0); }
+const KNC = v => v >= 4 ? '#d71920' : v === 3 ? '#e8a33d' : '#f2cf5b';
 function feelHTML() {
   const items = allItems().filter(i => !isRest(i));
   const cw = currentWeekIdx();
   const ws = weeks().slice(0, cw + 1);
   const pts = ws.map(w => { const es = itemsOfWeek(w.het).map(i => entry(i.id)).filter(e => e.e); return es.length ? es.reduce((s, e) => s + e.e, 0) / es.length : null; });
-  const kn = ws.map(w => itemsOfWeek(w.het).map(i => entry(i.id).tr || 0).reduce((m, v) => Math.max(m, v), 0));
+  const kn = ws.map(w => itemsOfWeek(w.het).map(i => kneeOf(entry(i.id))).reduce((m, v) => Math.max(m, v), 0));
   const W = 320, H = 130, n = Math.max(ws.length, 2), X = k => 20 + k * (W - 30) / (n - 1), Y = v => 12 + (5 - v) * (H - 40) / 4;
   let path = '', dots = '';
   pts.forEach((v, k) => { if (v != null) { path += (path ? 'L' : 'M') + X(k).toFixed(1) + ' ' + Y(v).toFixed(1); dots += `<circle cx="${X(k)}" cy="${Y(v)}" r="3.5" fill="#d71920"/>`; } });
-  const knee = kn.map((v, k) => v ? `<circle cx="${X(k)}" cy="${H - 8}" r="${v === 2 ? 6 : 4}" fill="${v === 2 ? '#d71920' : '#e8a33d'}"/>` : '').join('');
+  const knee = kn.map((v, k) => v >= 2 ? `<circle cx="${X(k)}" cy="${H - 8}" r="${2 + v}" fill="${KNC(v)}"/>` : '').join('');
   const grid = [1, 3, 5].map(v => `<line x1="14" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="0" y="${Y(v) + 4}" font-size="10" fill="var(--mute)">${v}</text>`).join('');
-  const notes = items.map(i => ({ i, e: entry(i.id) })).filter(x => x.e.m || x.e.tr).sort((a, b) => eff(a.i) < eff(b.i) ? 1 : -1).slice(0, 10);
-  return `<div class="card"><b>Érzés és térd</b><div class="muted legend">piros vonal: heti átlagos érzés (1 nehéz – 5 könnyű) · alul: <span style="color:#e8a33d">●</span> térd érzem, <span style="color:#d71920">●</span> fáj</div>
+  const notes = items.map(i => ({ i, e: entry(i.id) })).filter(x => x.e.m || kneeOf(x.e) >= 2).sort((a, b) => eff(a.i) < eff(b.i) ? 1 : -1).slice(0, 10);
+  return `<div class="card"><b>Érzés és térd</b><div class="muted legend">piros vonal: heti átlagos érzés (1 nehéz – 5 könnyű) · alul: térdfájdalom a héten (legnagyobb érték, 1–5) <span style="color:#f2cf5b">●</span> 2 <span style="color:#e8a33d">●</span> 3 <span style="color:#d71920">●</span> 4–5</div>
     ${pts.some(v => v != null) || kn.some(v => v) ? `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}<path d="${path}" fill="none" stroke="#d71920" stroke-width="2"/>${dots}${knee}</svg>` : '<div class="muted" style="padding:8px 0">Még nincs értékelt edzés. Kipipáláskor add meg, hogy ment, és hogy érezted-e a térdedet.</div>'}
-    ${notes.length ? `<div class="notes">${notes.map(x => `<div class="nrow"><span class="muted">${fmtD(eff(x.i))}</span> <b>${esc(LABEL(x.i.sport))}</b> ${x.e.tr ? `<span class="kn k${x.e.tr}">térd: ${['rendben', 'érzem', 'fáj'][x.e.tr]}</span>` : ''}${x.e.m ? `<div>${esc(x.e.m)}</div>` : ''}</div>`).join('')}</div>` : ''}</div>`;
+    ${notes.length ? `<div class="notes">${notes.map(x => `<div class="nrow"><span class="muted">${fmtD(eff(x.i))}</span> <b>${esc(LABEL(x.i.sport))}</b> ${kneeOf(x.e) >= 2 ? `<span class="kn" style="background:${KNC(kneeOf(x.e))}33">térd: ${kneeOf(x.e)}/5</span>` : ''}${x.e.m ? `<div>${esc(x.e.m)}</div>` : ''}</div>`).join('')}</div>` : ''}</div>`;
 }
 function poolSlots(u, d) {
   const z = (u.zarva || []).find(x => d >= x[0] && d <= x[1]);
@@ -669,7 +671,7 @@ $('#main').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) { deleteItem(del.dataset.del); return; }
   const kb = e.target.closest('[data-knee]');
-  if (kb) { const id = kb.closest('.it').dataset.id, v = Number(kb.dataset.knee); change(id, { tr: entry(id).tr === v ? 0 : v }); render(); return; }
+  if (kb) { const id = kb.closest('.it').dataset.id, v = Number(kb.dataset.knee); change(id, { tf: kneeOf(entry(id)) === v ? 0 : v, tr: null }); render(); return; }
   const rr = e.target.closest('[data-renreset]');
   if (rr) { change(rr.dataset.renreset, { n: null }); render(); return; }
   if (e.target.closest('input')) return;
