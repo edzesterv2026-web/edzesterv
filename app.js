@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '38';
+const APP_VERSION = '39';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -22,7 +22,7 @@ let garmin = ls.get('garmin', { hetek: {}, edzesek: {} });
 let uszi = ls.get('uszi', null);
 let uDay = null;
 let pend = ls.get('pend', {});
-let view = 'ma';
+let view = 'het';
 let weekIdx = null;
 let openId = null;
 let flushTimer = null;
