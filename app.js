@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '48';
+const APP_VERSION = '49';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -64,6 +64,25 @@ async function ghGet(path) {
   return { data: JSON.parse(b64dec(j.content)), sha: j.sha };
 }
 
+let syncBusy = false;
+async function syncNow(btn) {
+  if (syncBusy) return;
+  const before = garmin.szinkron;
+  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/actions/workflows/sync.yml/dispatches`, {
+    method: 'POST', headers: { Authorization: 'Bearer ' + cfg.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    body: JSON.stringify({ ref: 'main' })
+  }).catch(() => null);
+  if (!r || !r.ok) {
+    alert(r && (r.status === 403 || r.status === 404) ? 'A telefonod GitHub-kulcsának még nincs joga elindítani a szinkront. A GitHubon a kulcs beállításainál a Repository permissions alatt az „Actions” legyen „Read and write”.' : 'Nem sikerült elindítani a szinkront, próbáld újra.');
+    return;
+  }
+  syncBusy = true; btn.disabled = true; btn.textContent = 'Szinkron fut… (1–2 perc)';
+  for (let k = 0; k < 12; k++) {
+    await new Promise(res => setTimeout(res, 20000));
+    try { const g = await ghGet('garmin.json'); if (g.data.szinkron !== before) { syncBusy = false; await loadRemote(); return; } } catch (e) {}
+  }
+  syncBusy = false; btn.disabled = false; btn.textContent = 'Frissítés most';
+}
 async function loadRemote() {
   if (!navigator.onLine) { setSync('offline'); return; }
   setSync('frissítés…');
@@ -570,13 +589,15 @@ function renderInfo() {
     <button class="btn" id="ftpsave">Mentés</button>
     ${+b.ftp ? `<table style="margin-top:10px"><tr><th>Bicikli Z2 (56–75%)</th><td>${watts(56)}–${watts(75)} W</td></tr><tr><th>Sweet spot (88–94%)</th><td>${watts(88)}–${watts(94)} W</td></tr><tr><th>Küszöb (95–100%)</th><td>${watts(95)}–${watts(100)} W</td></tr><tr><th>Versenytempó (75–80%)</th><td>${watts(75)}–${watts(80)} W</td></tr></table>` : ''}
     <table style="margin-top:10px">${Object.entries(PZ()).map(([k, v]) => `<tr><th>Futás ${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>`;
-  html += `<div class="card"><b>Automatikus szinkron</b><div class="muted" style="margin:6px 0">${garmin.szinkron ? 'Utolsó szinkron: ' + esc(garmin.szinkron) + '. Óránként (6–23 óra) behúzza az Intervals.icu-ból a Garmin- és Zwift-edzéseket, és kipipálja a napi edzést.' : 'Még nincs bekapcsolva.'}</div></div>`;
+  html += `<div class="card"><b>Automatikus szinkron</b><div class="muted" style="margin:6px 0">${garmin.szinkron ? 'Utolsó szinkron: ' + esc(garmin.szinkron) + '. Óránként (6–23 óra) behúzza az Intervals.icu-ból a Garmin- és Zwift-edzéseket, és kipipálja a napi edzést.' : 'Még nincs bekapcsolva.'}</div><button class="btn" id="syncnow">${syncBusy ? 'Szinkron fut… (1–2 perc)' : 'Frissítés most'}</button></div>`;
   html += `<div class="card"><b>Beállítások</b><div class="muted" style="margin:6px 0">Terv frissítve: ${esc(plan.frissitve || '')}${garmin.frissitve ? ' · Garmin-ellenőrzés: ' + esc(garmin.frissitve) : ''}</div>
     <button class="btn ghost" id="reload">Frissítés most</button> <button class="btn ghost" id="reset">Kulcs cseréje</button></div>`;
   $('#main').innerHTML = html;
   $('#reload').onclick = () => loadRemote();
   $('#ftpsave').onclick = () => { const v = Math.round(+$('#ftp').value); change('_beall', { ftp: v > 50 && v < 600 ? v : null }); render(); };
   $('#reset').onclick = () => renderSetup();
+  $('#syncnow').onclick = e => syncNow(e.currentTarget);
+  if (syncBusy) $('#syncnow').disabled = true;
 }
 
 function renderSetup(msg) {
