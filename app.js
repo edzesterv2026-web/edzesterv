@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '50';
+const APP_VERSION = '51';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -68,14 +68,10 @@ let syncBusy = false;
 async function syncNow(btn) {
   if (syncBusy) return;
   const before = garmin.szinkron;
-  const r = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/actions/workflows/sync.yml/dispatches`, {
-    method: 'POST', headers: { Authorization: 'Bearer ' + cfg.token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-    body: JSON.stringify({ ref: 'main' })
-  }).catch(() => null);
-  if (!r || !r.ok) {
-    alert(r && (r.status === 403 || r.status === 404) ? 'A telefonod GitHub-kulcsának még nincs joga elindítani a szinkront. A GitHubon a kulcs beállításainál a Repository permissions alatt az „Actions” legyen „Read and write”. (' + r.status + ')' : 'Nem sikerült elindítani a szinkront' + (r ? ' (' + r.status + ')' : '') + ', próbáld újra.');
-    return;
-  }
+  try {
+    let sha; try { sha = (await gh('sync_keres.json?t=' + Date.now())).sha; } catch (e) {}
+    await gh('sync_keres.json', { method: 'PUT', body: { message: 'Szinkron kérése', content: b64enc(JSON.stringify({ t: new Date().toISOString() })), sha } });
+  } catch (e) { alert('Nem sikerült elindítani a szinkront' + (e.status ? ' (' + e.status + ')' : '') + ', próbáld újra.'); return; }
   syncBusy = true; btn.disabled = true; btn.textContent = 'Szinkron fut… (1–2 perc)';
   for (let k = 0; k < 12; k++) {
     await new Promise(res => setTimeout(res, 20000));
