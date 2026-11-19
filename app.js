@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '53';
+const APP_VERSION = '54';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -35,7 +35,7 @@ const fmtD = s => { const d = parseD(s); return HONAP[d.getMonth()] + ' ' + d.ge
 const entry = id => Object.assign({}, log[id] || {}, pend[id] || {});
 const isRest = it => REST.includes(it.sport);
 
-function setSync(t) { $('#syncst').textContent = t; }
+function setSync(t) { $('#syncst').textContent = t === '✓' ? '' : t; }
 
 /* ---------- GitHub ---------- */
 function b64dec(b64) {
