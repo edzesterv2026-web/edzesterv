@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '52';
+const APP_VERSION = '53';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -65,10 +65,14 @@ async function ghGet(path) {
 }
 
 let syncBusy = false;
-async function syncNow(btn) {
+function syncUI() {
+  const h = $('#synchd'); if (h) h.classList.toggle('busy', syncBusy);
+  const b = $('#syncnow'); if (b) { b.disabled = syncBusy; b.textContent = syncBusy ? 'Szinkron fut… (1–2 perc)' : 'Szinkron indítása'; }
+}
+async function syncNow() {
   if (syncBusy) return;
   const before = garmin.szinkron;
-  syncBusy = true; btn.disabled = true;
+  syncBusy = true; syncUI();
   let ok = false, st = 0;
   for (let k = 0; k < 3 && !ok; k++) {
     try {
@@ -77,13 +81,12 @@ async function syncNow(btn) {
       ok = true;
     } catch (e) { st = e.status; await new Promise(res => setTimeout(res, 1500)); }
   }
-  if (!ok) { syncBusy = false; btn.disabled = false; alert('Nem sikerült elindítani a szinkront' + (st ? ' (' + st + ')' : '') + ', próbáld újra.'); return; }
-  btn.textContent = 'Szinkron fut… (1–2 perc)';
+  if (!ok) { syncBusy = false; syncUI(); alert('Nem sikerült elindítani a szinkront' + (st ? ' (' + st + ')' : '') + ', próbáld újra.'); return; }
   for (let k = 0; k < 12; k++) {
     await new Promise(res => setTimeout(res, 20000));
-    try { const g = await ghGet('garmin.json'); if (g.data.szinkron !== before) { syncBusy = false; await loadRemote(); return; } } catch (e) {}
+    try { const g = await ghGet('garmin.json'); if (g.data.szinkron !== before) { syncBusy = false; syncUI(); await loadRemote(); return; } } catch (e) {}
   }
-  syncBusy = false; btn.disabled = false; btn.textContent = 'Szinkron indítása';
+  syncBusy = false; syncUI();
 }
 async function loadRemote() {
   if (!navigator.onLine) { setSync('offline'); return; }
@@ -598,8 +601,8 @@ function renderInfo() {
   $('#reload').onclick = () => loadRemote();
   $('#ftpsave').onclick = () => { const v = Math.round(+$('#ftp').value); change('_beall', { ftp: v > 50 && v < 600 ? v : null }); render(); };
   $('#reset').onclick = () => renderSetup();
-  $('#syncnow').onclick = e => syncNow(e.currentTarget);
-  if (syncBusy) $('#syncnow').disabled = true;
+  $('#syncnow').onclick = () => syncNow();
+  syncUI();
 }
 
 function renderSetup(msg) {
