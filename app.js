@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '51';
+const APP_VERSION = '52';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -68,11 +68,17 @@ let syncBusy = false;
 async function syncNow(btn) {
   if (syncBusy) return;
   const before = garmin.szinkron;
-  try {
-    let sha; try { sha = (await gh('sync_keres.json?t=' + Date.now())).sha; } catch (e) {}
-    await gh('sync_keres.json', { method: 'PUT', body: { message: 'Szinkron kérése', content: b64enc(JSON.stringify({ t: new Date().toISOString() })), sha } });
-  } catch (e) { alert('Nem sikerült elindítani a szinkront' + (e.status ? ' (' + e.status + ')' : '') + ', próbáld újra.'); return; }
-  syncBusy = true; btn.disabled = true; btn.textContent = 'Szinkron fut… (1–2 perc)';
+  syncBusy = true; btn.disabled = true;
+  let ok = false, st = 0;
+  for (let k = 0; k < 3 && !ok; k++) {
+    try {
+      let sha; try { sha = (await gh('sync_keres.json?t=' + Date.now())).sha; } catch (e) {}
+      await gh('sync_keres.json', { method: 'PUT', body: { message: 'Szinkron kérése', content: b64enc(JSON.stringify({ t: new Date().toISOString(), r: Math.random() })), sha } });
+      ok = true;
+    } catch (e) { st = e.status; await new Promise(res => setTimeout(res, 1500)); }
+  }
+  if (!ok) { syncBusy = false; btn.disabled = false; alert('Nem sikerült elindítani a szinkront' + (st ? ' (' + st + ')' : '') + ', próbáld újra.'); return; }
+  btn.textContent = 'Szinkron fut… (1–2 perc)';
   for (let k = 0; k < 12; k++) {
     await new Promise(res => setTimeout(res, 20000));
     try { const g = await ghGet('garmin.json'); if (g.data.szinkron !== before) { syncBusy = false; await loadRemote(); return; } } catch (e) {}
