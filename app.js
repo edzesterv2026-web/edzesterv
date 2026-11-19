@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '43';
+const APP_VERSION = '44';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -682,7 +682,7 @@ $('#main').addEventListener('click', e => {
   if (rs) { change(rs.dataset.reset, { d: null }); render(); return; }
   if (e.target.closest('select')) return;
   const f = e.target.closest('[data-feel]');
-  if (f) { const id = f.closest('.it').dataset.id, v = Number(f.dataset.feel); change(id, { ny: diffOf(id) === v && entry(id).ny != null ? null : v, e: null }); render(); return; }
+  if (f) { const id = f.closest('.it').dataset.id, v = Number(f.dataset.feel), cur = diffOf(id); change(id, { ny: Math.ceil(cur) === v ? 0 : v, e: null }); render(); return; }
   const hs = e.target.closest('[data-hsave]');
   if (hs) { const id = hs.dataset.hsave, it = allItems().find(x => x.id === id), v = $(`[data-hedit="${id}"]`).value.trim(); change(id, { h: it && !it.extra && v === (it.hogyan || '') ? null : v }); editId = null; openId = id; render(); return; }
   if (e.target.closest('[data-hcancel]')) { editId = null; render(); return; }
