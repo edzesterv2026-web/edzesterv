@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '54';
+const APP_VERSION = '55';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -34,6 +34,8 @@ const parseD = s => { const [y, m, d] = s.split('-').map(Number); return new Dat
 const fmtD = s => { const d = parseD(s); return HONAP[d.getMonth()] + ' ' + d.getDate() + '.'; };
 const entry = id => Object.assign({}, log[id] || {}, pend[id] || {});
 const isRest = it => REST.includes(it.sport);
+const RO = () => !!(cfg && cfg.ro);
+function applyRO() { document.body.classList.toggle('ro', RO()); }
 
 function setSync(t) { $('#syncst').textContent = t === '✓' ? '' : t; }
 
@@ -70,7 +72,7 @@ function syncUI() {
   const b = $('#syncnow'); if (b) { b.disabled = syncBusy; b.textContent = syncBusy ? 'Szinkron fut… (1–2 perc)' : 'Szinkron indítása'; }
 }
 async function syncNow() {
-  if (syncBusy) return;
+  if (syncBusy || RO()) return;
   const before = garmin.szinkron;
   syncBusy = true; syncUI();
   let ok = false, st = 0;
@@ -108,6 +110,7 @@ async function loadRemote() {
 }
 
 function change(id, patch) {
+  if (RO()) return;
   pend[id] = Object.assign({}, pend[id] || {}, patch);
   ls.set('pend', pend);
   setSync('mentésre vár');
@@ -116,7 +119,7 @@ function change(id, patch) {
 }
 
 async function flush(retry = 0) {
-  if (!Object.keys(pend).length || !navigator.onLine || !cfg) return;
+  if (RO() || !Object.keys(pend).length || !navigator.onLine || !cfg) return;
   setSync('mentés…');
   const sending = JSON.parse(JSON.stringify(pend));
   try {
@@ -269,7 +272,7 @@ function itemHTML(i) {
     <div class="body" data-tog="${i.id}">
       ${rest ? '' : `<div class="tag" style="--c:var(--${i.sport})">${esc(LABEL(i.sport))}</div>`}<div class="t">${esc(dispName(i))}</div>
       ${moved && openId !== i.id ? `<div class="note">áthelyezve (eredetileg ${fmtD(i.datum)})</div>` : ''}
-      ${e.m && openId !== i.id ? `<div class="note">„${esc(e.m)}”</div>` : ''}
+      ${e.m && (openId !== i.id || RO()) ? `<div class="note">„${esc(e.m)}”</div>` : ''}
       ${g ? `<div class="gm">⌚ ${esc(g.s)}</div>` : ''}
       ${editId === i.id ? `<div class="hedit"><textarea data-hedit="${i.id}" rows="4">${esc(howOf(i))}</textarea><div class="hbtns"><button class="btn" data-hsave="${i.id}">Mentés</button><button class="btn ghost" data-hcancel="1">Mégse</button>${e.h != null && !i.extra ? `<button class="btn ghost" data-hreset="${i.id}">Eredeti</button>` : ''}</div></div>` : `<div class="how">${esc(augFTP(howOf(i)))}</div>`}
       ${rest ? `<div class="extra">${renHTML(i)}${moveHTML(i)}</div>` : `<div class="extra">
@@ -590,7 +593,7 @@ function renderInfo() {
   let html = `<div class="card"><b>Fogalmak</b><table>${plan.fogalmak.map(f => `<tr><th style="width:38%">${esc(f.f)}</th><td>${esc(f.j)}</td></tr>`).join('')}</table></div>`;
   const b = beall();
   html += `<div class="card"><b>FTP és pulzuszónák</b>
-    <label class="muted">FTP (watt) – a Zwift-teszt eredménye</label><input type="number" id="ftp" inputmode="numeric" value="${esc(b.ftp || '')}" placeholder="pl. 210">
+    <label class="muted rolabel">FTP (watt) – a Zwift-teszt eredménye</label><input type="number" id="ftp" inputmode="numeric" value="${esc(b.ftp || '')}" placeholder="pl. 210">
     <button class="btn" id="ftpsave">Mentés</button>
     ${+b.ftp ? `<table style="margin-top:10px"><tr><th>Bicikli Z2 (56–75%)</th><td>${watts(56)}–${watts(75)} W</td></tr><tr><th>Sweet spot (88–94%)</th><td>${watts(88)}–${watts(94)} W</td></tr><tr><th>Küszöb (95–100%)</th><td>${watts(95)}–${watts(100)} W</td></tr><tr><th>Versenytempó (75–80%)</th><td>${watts(75)}–${watts(80)} W</td></tr></table>` : ''}
     <table style="margin-top:10px">${Object.entries(PZ()).map(([k, v]) => `<tr><th>Futás ${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table></div>`;
@@ -605,20 +608,24 @@ function renderInfo() {
   syncUI();
 }
 
+const NEZO = /[?&]nezo\b/.test(location.search);
 function renderSetup(msg) {
   $('#nav').style.display = 'none';
-  const c = cfg || DEF;
+  const c = cfg || (NEZO ? { owner: 'edzesterv2026-web', repo: DEF.repo } : DEF);
   $('#main').innerHTML = `<div class="card"><b>Első beállítás</b>
     <p class="muted">Ide kell egyszer beírnod a GitHubon létrehozott hozzáférési kulcsot. Ez csak ezen a telefonon tárolódik.</p>
     ${msg ? `<p style="color:#c0392b">${esc(msg)}</p>` : ''}
     <label class="muted">GitHub-felhasználónév</label><input type="text" id="o" value="${esc(c.owner)}" autocapitalize="off" autocorrect="off">
     <label class="muted">Adattároló neve</label><input type="text" id="r" value="${esc(c.repo)}" autocapitalize="off" autocorrect="off">
     <label class="muted">Hozzáférési kulcs (github_pat_…)</label><input type="password" id="k" value="" autocapitalize="off" autocorrect="off">
+    <label class="rochk"><input type="checkbox" id="ro" ${c.ro || NEZO ? 'checked' : ''}> Csak megtekintés (olvasási kulccsal)</label>
     <button class="btn" id="save">Mentés és indítás</button></div>`;
   $('#save').onclick = () => {
     const k = $('#k').value.trim() || (cfg && cfg.token);
     if (!k) return;
-    cfg = { owner: $('#o').value.trim(), repo: $('#r').value.trim(), token: k };
+    cfg = { owner: $('#o').value.trim(), repo: $('#r').value.trim(), token: k, ro: $('#ro').checked };
+    if (cfg.ro) { pend = {}; ls.set('pend', pend); }
+    applyRO();
     ls.set('cfg', cfg);
     $('#nav').style.display = '';
     plan ? render() : ($('#main').innerHTML = '<div class="muted" style="padding:20px">Betöltés…</div>');
@@ -629,6 +636,7 @@ function renderSetup(msg) {
 
 function showPoolTab() { const b = document.querySelector('nav button[data-v="uszoda"]'); if (b) b.style.display = uszi ? '' : 'none'; }
 function render() {
+  applyRO();
   showPoolTab();
   if (!plan) return;
   plan.edzesek.forEach((x, k) => ORD[x.id] = k);
@@ -723,6 +731,7 @@ $('#main').addEventListener('click', e => {
   if (go) { view = 'het'; weekIdx = Number(go.dataset.gowk); window.scrollTo(0, 0); render(); }
 });
 $('#main').addEventListener('change', e => {
+  if (RO()) return;
   const s = e.target.closest('[data-move]');
   if (s) { moveTo(s.dataset.move, s.value); }
 });
@@ -761,14 +770,14 @@ function deleteItem(id) {
 function showUndo() {
   const b = $('#undo');
   if (!b.dataset.on) { b.dataset.on = 1; b.addEventListener('click', undoMove); }
-  b.style.display = undoStack.length ? '' : 'none';
+  b.style.display = undoStack.length && !RO() ? '' : 'none';
 }
 
 /* ---------- húzás (hosszú nyomás) ---------- */
 let drag = null, noClickUntil = 0;
 const mainEl = $('#main');
 mainEl.addEventListener('touchstart', e => {
-  if (e.touches.length > 1) return;
+  if (e.touches.length > 1 || RO()) return;
   if (swOpen && !e.target.closest('.swact')) closeSwipe();
   const it = e.target.closest('.it[data-id]');
   if (!it || it.classList.contains('empty') || e.target.closest('.chk,textarea,select,button,input,.extra')) return;
@@ -869,6 +878,7 @@ function cleanupDrag() {
 }
 
 $('#main').addEventListener('input', e => {
+  if (RO()) return;
   if (e.target.dataset.ren) {
     const id = e.target.dataset.ren, it = allItems().find(x => x.id === id), v = e.target.value.trim();
     if (!it) return;
