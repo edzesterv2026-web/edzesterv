@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '55';
+const APP_VERSION = '56';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -357,12 +357,13 @@ function renderHet() {
   const wk = w[weekIdx];
   const st = weekStats(wk.het);
   const parts = wk.cim.split(' · ');
-  let html = modeHTML() + `<div class="wkhead"><button data-wk="-1" ${weekIdx === 0 ? 'disabled' : ''}>‹</button>
+  let html = modeHTML() + `<div class="wkswipe"><div class="wkhead"><button data-wk="-1" ${weekIdx === 0 ? 'disabled' : ''}>‹</button>
     <div class="ttl">${esc(parts[0])}<small>${esc(parts.slice(1).join(' · '))}</small></div>
     <button data-wk="1" ${weekIdx === w.length - 1 ? 'disabled' : ''}>›</button></div>`;
   html += `<div class="bar"><i style="width:${st.total ? 100 * st.done / st.total : 0}%"></i></div>
     <div class="muted" style="margin:0 4px 10px">${st.done} / ${st.total} edzés kész · ${hrs(weekHours(wk.het).done)} / kb. ${hrs(weekHours(wk.het).plan)} óra</div>`;
   if (wk.megj) html += `<div class="wmegj">${esc(wk.megj)}</div>`;
+  html += '</div>';
   const gw = garmin.hetek && garmin.hetek[wk.het];
   if (gw) html += `<div class="card"><h3 style="margin:0 0 4px;font-size:14px;color:var(--mute)">⌚ GARMIN-ÖSSZESÍTŐ</h3><div style="font-size:14px;white-space:pre-line">${esc(gw)}</div></div>`;
   const its = itemsOfWeek(wk.het);
@@ -373,6 +374,43 @@ function renderHet() {
   if (scrollToday) { scrollToday = false; requestAnimationFrame(goToday); }
 }
 let scrollToday = true;
+/* ---------- heti lapozás húzással (fejléc + hétsáv) ---------- */
+let wsw = null;
+document.addEventListener('touchstart', e => {
+  if (view !== 'het' || hetMode === 'honap' || e.touches.length > 1) return;
+  if (!e.target.closest('header,.wkswipe') || e.target.closest('#synchd,#undo')) return;
+  const t = e.touches[0]; wsw = { x0: t.clientX, y0: t.clientY, dx: 0, on: false };
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!wsw) return;
+  const t = e.touches[0], dx = t.clientX - wsw.x0, dy = t.clientY - wsw.y0;
+  if (!wsw.on) {
+    if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { wsw = null; return; }
+    if (Math.abs(dx) < 10) return;
+    wsw.on = true; $('#main').style.transition = 'none';
+  }
+  e.preventDefault();
+  const n = weeks().length, edge = (dx > 0 && weekIdx === 0) || (dx < 0 && weekIdx === n - 1);
+  wsw.dx = edge ? dx / 4 : dx;
+  $('#main').style.transform = `translateX(${wsw.dx}px)`;
+}, { passive: false });
+function wswEnd() {
+  if (!wsw) return;
+  const s = wsw; wsw = null; if (!s.on) return;
+  const m = $('#main'), W = window.innerWidth, n = weeks().length;
+  const dir = s.dx < -60 && weekIdx < n - 1 ? 1 : s.dx > 60 && weekIdx > 0 ? -1 : 0;
+  noClickUntil = Date.now() + 350;
+  m.style.transition = 'transform .18s ease-out';
+  if (!dir) { m.style.transform = ''; return; }
+  m.style.transform = `translateX(${-dir * W}px)`;
+  setTimeout(() => {
+    weekIdx += dir; openId = null; window.scrollTo(0, 0); render();
+    m.style.transition = 'none'; m.style.transform = `translateX(${dir * W}px)`;
+    requestAnimationFrame(() => requestAnimationFrame(() => { m.style.transition = 'transform .2s ease-out'; m.style.transform = ''; }));
+  }, 180);
+}
+document.addEventListener('touchend', wswEnd);
+document.addEventListener('touchcancel', wswEnd);
 function goToday() {
   const el = $(`.day[data-date="${todayStr()}"]`); if (!el) return;
   const h = $('header'), hh = h && getComputedStyle(h).position === 'sticky' ? h.offsetHeight : 0;
