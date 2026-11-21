@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '56';
+const APP_VERSION = '57';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -219,7 +219,7 @@ function weekStats(h) {
 
 /* ---------- rendering ---------- */
 const beall = () => entry('_beall');
-const PULZ_DEF = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '167–176' };
+const PULZ_DEF = { Z1: '150 alatt', Z2: '150–158', 'tempó': '159–166', 'küszöb': '170–179' };
 const PZ = () => (plan && plan.pulzus) || PULZ_DEF;
 const tests = () => entry('_tesztek');
 function curFTP() { const l = (tests().ftp || []).slice().sort((x, y) => x.d < y.d ? -1 : 1); return l.length ? +l[l.length - 1].v : +beall().ftp || 0; }
