@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '58';
+const APP_VERSION = '59';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -540,7 +540,11 @@ function formaHTML() {
     <svg viewBox="0 0 ${W} ${HB}" width="100%"><line x1="18" x2="${W}" y1="${y0}" y2="${y0}" stroke="var(--line)"/>${bars}</svg>
     <div class="muted" style="display:flex;justify-content:space-between;font-size:12px"><span>${dl(f[0][0])}</span><span>${dl(last[0])}</span></div>
     <div class="fsum"><div><b style="color:#2f6fd6">${Math.round(last[1])}</b><span>fittség</span></div><div><b style="color:#d63f8c">${Math.round(last[2])}</b><span>fáradtság</span></div><div><b style="color:${t >= 0 ? '#2e8b57' : '#e8a33d'}">${t > 0 ? '+' : ''}${Math.round(t)}</b><span>frissesség</span></div></div>
-    <div class="pmed">${ert}</div></div>`;
+    <div class="pmed">Most: ${ert}.</div>
+    <div class="fexp"><p><b>Fittség:</b> az elmúlt kb. 6 hét edzésterhelésének átlaga, a régebbi napok kisebb súllyal. Lassan nő, ez mutatja, mennyi edzést építettél be.</p>
+    <p><b>Fáradtság:</b> ugyanez az elmúlt kb. 1 hétre. Egy kemény hét után gyorsan felmegy, pihenővel gyorsan lejön.</p>
+    <p><b>Frissesség</b> = fittség − fáradtság. Edzésidőszakban általában negatív (−10 és −30 között), ez rendben van. Ha tartósan −30 alatt marad, érdemes könnyíteni. A könnyített heteken visszaemelkedik, a verseny előtti frissítésben pedig pozitívba fordul: a versenynapra az a cél, hogy enyhén pozitív legyen (kb. +5 és +15 között), miközben a fittség még magas.</p>
+    <p class="muted">A terhelést az Intervals.icu számolja: a biciklinél a wattokból (FTP-hez viszonyítva), a futásnál és úszásnál a pulzusból. Csak a 2026. nov. 17. óta rögzített edzéseket látja, ezért a fittség eleinte alacsony, és kb. 6 hét alatt áll be.</p></div></div>`;
 }
 function feelHTML() {
   const items = allItems().filter(i => !isRest(i));
