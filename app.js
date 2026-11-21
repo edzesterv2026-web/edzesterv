@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '57';
+const APP_VERSION = '58';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -428,8 +428,10 @@ const parseMMSS = v => { const m = String(v).trim().match(/^(\d+)[:.,](\d{1,2})$
 const TESZT = {
   ftp: { nev: 'FTP (bicikli)', egys: 'W', fmt: v => v + ' W', parse: v => Math.round(+v) || null, jobb: 1, ph: 'pl. 205' },
   usz400: { nev: '400 m úszás', egys: 'perc:mp', fmt: mmss, parse: parseMMSS, jobb: -1, ph: 'pl. 9:30' },
-  fut5: { nev: '5 km futás', egys: 'perc:mp', fmt: mmss, parse: parseMMSS, jobb: -1, ph: 'pl. 24:10' }
+  fut5: { nev: '5 km futás', egys: 'perc:mp', fmt: mmss, parse: parseMMSS, jobb: -1, ph: 'pl. 24:10' },
+  lthr: { nev: 'Küszöbpulzus (futás)', egys: 'üt/p', fmt: v => v + ' üt/p', parse: v => Math.round(+v) || null, jobb: 1, ph: 'pl. 179' }
 };
+const kuszobPZ = () => { const m = String(PZ()['küszöb'] || '').match(/(\d+)\D+(\d+)/); return m ? +m[2] : null; };
 function sparkSVG(l, jobb) {
   if (l.length < 2) return '';
   const W = 300, H = 60, vs = l.map(x => +x.v), mn = Math.min(...vs), mx = Math.max(...vs), r = mx - mn || 1;
@@ -443,13 +445,15 @@ function renderTesztek() {
     const l = (T[k] || []).slice().sort((x, y) => x.d < y.d ? -1 : 1);
     const last = l[l.length - 1], first = l[0];
     let diff = '';
-    if (l.length > 1) { const dv = (+last.v - +first.v) * d.jobb; diff = `<span class="tdiff ${dv >= 0 ? 'jo' : ''}">${dv >= 0 ? '▲' : '▼'} ${k === 'ftp' ? Math.abs(+last.v - +first.v) + ' W' : mmss(Math.abs(+last.v - +first.v))} az első óta</span>`; }
+    if (l.length > 1) { const dv = (+last.v - +first.v) * d.jobb; diff = `<span class="tdiff ${dv >= 0 && k !== 'lthr' ? 'jo' : ''}">${+last.v >= +first.v ? '▲' : '▼'} ${k === 'ftp' ? Math.abs(+last.v - +first.v) + ' W' : k === 'lthr' ? Math.abs(+last.v - +first.v) + ' üt/p' : mmss(Math.abs(+last.v - +first.v))} az első óta</span>`; }
+    let zona = '';
+    if (k === 'lthr') { const z = kuszobPZ(); zona = last && z ? (Math.abs(+last.v - z) >= 3 ? `<div class="pmed" style="color:#d71920">Eltér a tervben használt ${z}-es küszöbtől (${PZ()['küszöb']}). Szólj, és ez alapján átírom a pulzuszónákat.</div>` : `<div class="pmed">Egyezik a tervben használt küszöbbel (${PZ()['küszöb']}).</div>`) : `<div class="pmed">A tervben most: ${PZ()['küszöb'] || '–'} (Garmin-becslés: 179). Teszt: márc. 25.</div>`; }
     html += `<div class="card tcard"><div class="pn">${d.nev}</div>
       <div class="tbig">${last ? d.fmt(+last.v) : '–'} ${diff}</div>
-      ${last ? `<div class="pmed">utolsó: ${fmtD(last.d)}</div>` : '<div class="pmed">még nincs eredmény</div>'}
+      ${last ? `<div class="pmed">utolsó: ${fmtD(last.d)}</div>` : '<div class="pmed">még nincs eredmény</div>'}${zona}
       ${sparkSVG(l, d.jobb)}
       ${l.length ? `<div class="tlist">${l.slice().reverse().map(x => `<div class="tl2"><span>${fmtD(x.d)}</span><b>${d.fmt(+x.v)}</b><button data-tdel="${k}|${x.d}|${x.v}" aria-label="törlés">×</button></div>`).join('')}</div>` : ''}
-      <div class="tadd"><input type="date" id="td-${k}" value="${t}"><input type="text" id="tv-${k}" placeholder="${d.ph}" inputmode="${k === 'ftp' ? 'numeric' : 'text'}"><button class="btn" data-tadd="${k}">Hozzáad</button></div></div>`;
+      <div class="tadd"><input type="date" id="td-${k}" value="${t}"><input type="text" id="tv-${k}" placeholder="${d.ph}" inputmode="${k === 'ftp' || k === 'lthr' ? 'numeric' : 'text'}"><button class="btn" data-tadd="${k}">Hozzáad</button></div></div>`;
   });
   html += `<div class="muted" style="padding:8px 16px 16px">Az FTP-t a legutóbbi teszt alapján használja az alkalmazás a wattokhoz és a versenytervhez.</div>`;
   return html;
@@ -502,6 +506,7 @@ function renderHalad() {
     const x = wh[k];
     return `<div class="wkrow" data-gowk="${k}"><span class="wn">${w.het}. hét</span><div class="hb"><i class="p" style="width:${100 * x.plan / maxH}%"></i><i class="d" style="width:${100 * x.done / maxH}%"></i></div><span class="muted hv">${hrs(x.done)} / ${hrs(x.plan)}</span></div>`;
   }).join('')}</div>`;
+  html += formaHTML();
   html += feelHTML();
   $('#main').innerHTML = html;
 }
@@ -518,6 +523,25 @@ function renderSport() {
 function diffOf(id) { const e = entry(id); if (e.ny != null) return e.ny; if (e.e) return 6 - e.e; const g = gmOf(id); return g && g.rpe ? g.rpe / 2 : 0; }
 function kneeOf(e) { return e.tf || (e.tr === 1 ? 3 : e.tr === 2 ? 5 : 0); }
 const KNC = v => v >= 4 ? '#d71920' : v === 3 ? '#e8a33d' : '#f2cf5b';
+function formaHTML() {
+  const f = (garmin.forma || []).filter(x => x[1] != null);
+  const head = `<div class="card"><b>Fittség, fáradtság, frissesség</b><div class="muted legend"><span style="color:#2f6fd6">━</span> fittség (6 hét) <span style="color:#d63f8c">━</span> fáradtság (1 hét) · alul a frissesség (fittség − fáradtság). Az Intervals.icu számolja az edzések terheléséből.</div>`;
+  if (f.length < 2) return head + '<div class="muted" style="padding:8px 0">Még nincs elég adat. A szinkron naponta frissíti.</div></div>';
+  const W = 320, H = 120, HB = 46, n = f.length, mx = Math.max(10, ...f.map(x => Math.max(x[1], x[2]))) * 1.1;
+  const X = k => 22 + k * (W - 28) / (n - 1), Y = v => 8 + (mx - v) * (H - 16) / mx;
+  const line = i => f.map((x, k) => (k ? 'L' : 'M') + X(k).toFixed(1) + ' ' + Y(x[i]).toFixed(1)).join('');
+  const tsb = f.map(x => x[1] - x[2]), tm = Math.max(10, ...tsb.map(Math.abs)), bw = Math.max(1, (W - 28) / n - 1), y0 = HB / 2;
+  const bars = tsb.map((v, k) => { const h = Math.abs(v) / tm * (HB / 2 - 2); return `<rect x="${(X(k) - bw / 2).toFixed(1)}" y="${(v >= 0 ? y0 - h : y0).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, .5).toFixed(1)}" fill="${v >= 0 ? '#2e8b57' : '#e8a33d'}"/>`; }).join('');
+  const grid = [0, mx / 2].map(v => `<line x1="18" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="0" y="${Y(v) + 4}" font-size="10" fill="var(--mute)">${Math.round(v)}</text>`).join('');
+  const last = f[n - 1], t = last[1] - last[2];
+  const ert = t < -30 ? 'nagyon fáradt – könnyíts, ha a térd vagy az alvás is jelez' : t < -10 ? 'építő terhelés – ez a normális edzésidőszakban' : t <= 5 ? 'semleges' : 'friss – a versenyre ez a cél';
+  const dl = d => fmtD(d).replace(/\s*–.*$/, '');
+  return head + `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}<path d="${line(2)}" fill="none" stroke="#d63f8c" stroke-width="1.6"/><path d="${line(1)}" fill="none" stroke="#2f6fd6" stroke-width="2.2"/></svg>
+    <svg viewBox="0 0 ${W} ${HB}" width="100%"><line x1="18" x2="${W}" y1="${y0}" y2="${y0}" stroke="var(--line)"/>${bars}</svg>
+    <div class="muted" style="display:flex;justify-content:space-between;font-size:12px"><span>${dl(f[0][0])}</span><span>${dl(last[0])}</span></div>
+    <div class="fsum"><div><b style="color:#2f6fd6">${Math.round(last[1])}</b><span>fittség</span></div><div><b style="color:#d63f8c">${Math.round(last[2])}</b><span>fáradtság</span></div><div><b style="color:${t >= 0 ? '#2e8b57' : '#e8a33d'}">${t > 0 ? '+' : ''}${Math.round(t)}</b><span>frissesség</span></div></div>
+    <div class="pmed">${ert}</div></div>`;
+}
 function feelHTML() {
   const items = allItems().filter(i => !isRest(i));
   const cw = currentWeekIdx();
