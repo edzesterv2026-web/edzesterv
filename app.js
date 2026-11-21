@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '59';
+const APP_VERSION = '60';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -534,17 +534,39 @@ function formaHTML() {
   const bars = tsb.map((v, k) => { const h = Math.abs(v) / tm * (HB / 2 - 2); return `<rect x="${(X(k) - bw / 2).toFixed(1)}" y="${(v >= 0 ? y0 - h : y0).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, .5).toFixed(1)}" fill="${v >= 0 ? '#2e8b57' : '#e8a33d'}"/>`; }).join('');
   const grid = [0, mx / 2].map(v => `<line x1="18" x2="${W}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="0" y="${Y(v) + 4}" font-size="10" fill="var(--mute)">${Math.round(v)}</text>`).join('');
   const last = f[n - 1], t = last[1] - last[2];
-  const ert = t < -30 ? 'nagyon fáradt – könnyíts, ha a térd vagy az alvás is jelez' : t < -10 ? 'építő terhelés – ez a normális edzésidőszakban' : t <= 5 ? 'semleges' : 'friss – a versenyre ez a cél';
   const dl = d => fmtD(d).replace(/\s*–.*$/, '');
   return head + `<svg viewBox="0 0 ${W} ${H}" width="100%">${grid}<path d="${line(2)}" fill="none" stroke="#d63f8c" stroke-width="1.6"/><path d="${line(1)}" fill="none" stroke="#2f6fd6" stroke-width="2.2"/></svg>
     <svg viewBox="0 0 ${W} ${HB}" width="100%"><line x1="18" x2="${W}" y1="${y0}" y2="${y0}" stroke="var(--line)"/>${bars}</svg>
     <div class="muted" style="display:flex;justify-content:space-between;font-size:12px"><span>${dl(f[0][0])}</span><span>${dl(last[0])}</span></div>
     <div class="fsum"><div><b style="color:#2f6fd6">${Math.round(last[1])}</b><span>fittség</span></div><div><b style="color:#d63f8c">${Math.round(last[2])}</b><span>fáradtság</span></div><div><b style="color:${t >= 0 ? '#2e8b57' : '#e8a33d'}">${t > 0 ? '+' : ''}${Math.round(t)}</b><span>frissesség</span></div></div>
-    <div class="pmed">Most: ${ert}.</div>
-    <div class="fexp"><p><b>Fittség:</b> az elmúlt kb. 6 hét edzésterhelésének átlaga, a régebbi napok kisebb súllyal. Lassan nő, ez mutatja, mennyi edzést építettél be.</p>
-    <p><b>Fáradtság:</b> ugyanez az elmúlt kb. 1 hétre. Egy kemény hét után gyorsan felmegy, pihenővel gyorsan lejön.</p>
-    <p><b>Frissesség</b> = fittség − fáradtság. Edzésidőszakban általában negatív (−10 és −30 között), ez rendben van. Ha tartósan −30 alatt marad, érdemes könnyíteni. A könnyített heteken visszaemelkedik, a verseny előtti frissítésben pedig pozitívba fordul: a versenynapra az a cél, hogy enyhén pozitív legyen (kb. +5 és +15 között), miközben a fittség még magas.</p>
-    <p class="muted">A terhelést az Intervals.icu számolja: a biciklinél a wattokból (FTP-hez viszonyítva), a futásnál és úszásnál a pulzusból. Csak a 2026. nov. 17. óta rögzített edzéseket látja, ezért a fittség eleinte alacsony, és kb. 6 hét alatt áll be.</p></div></div>`;
+    <div class="fexp">${formaElemzes(f)}</div>
+    <details class="fexp"><summary>Mit jelentenek a görbék?</summary><p><b>Fittség:</b> az elmúlt kb. 6 hét edzésterhelésének súlyozott átlaga; lassan nő és lassan csökken. <b>Fáradtság:</b> ugyanez kb. 1 hétre; gyorsan jön, gyorsan elmúlik. <b>Frissesség</b> = fittség − fáradtság: edzésidőszakban −10 és −30 között normális, a versenynapra kb. +5 és +15 között a cél. A terhelést az Intervals.icu számolja: biciklinél a wattokból, futásnál és úszásnál a pulzusból.</p></details></div>`;
+}
+function formaElemzes(f) {
+  const n = f.length, t = todayStr(), last = f[n - 1], ctl = Math.round(last[1]), tsb = Math.round(last[1] - last[2]);
+  const span = Math.round((parseD(t) - parseD(f[0][0])) / 864e5), uj = span < 42, out = [];
+  if (uj) out.push(`A görbe még csak ${span} napnyi adatból számol (${fmtD(f[0][0])} óta), ezért a fittség (${ctl}) jóval alacsonyabb a valódi edzettségednél: a korábbi edzéseid, pl. a maratoni felkészülés, nincsenek benne. Kb. ${fmtD(addDays(f[0][0], 42))} körül lesz megbízható, addig inkább a görbék irányát figyeld, ne a számokat.`);
+  if (n >= 8) {
+    const d7 = Math.round((last[1] - f[n - 8][1]) * 10) / 10, v = `${d7 >= 0 ? '+' : ''}${String(d7).replace('.', ',')}`;
+    let s = `Az elmúlt héten a fittséged ${v} ponttal ${d7 >= 0 ? 'nőtt' : 'csökkent'}`;
+    if (!uj) s += d7 > 8 ? ': ez gyors emelés, figyelj az alvásra és a térdre.' : d7 >= 2 ? ': ez egészséges ütemű építés.' : d7 > -2 ? ': nagyjából szinten tartás.' : ': könnyített hét vagy kimaradt edzések után ez természetes.';
+    else s += '.';
+    out.push(s);
+  }
+  const wk = weeks()[currentWeekIdx()] || {}, cim = (wk.cim || '').toLowerCase();
+  const taper = /frissítés|versenyhét/.test(cim), light = /könnyít/.test(cim);
+  if (uj && tsb < -10) out.push(`A frissesség (${tsb}) most torzított: a kevés korábbi adat miatt a fáradtság a fittséghez képest túl nagynak látszik, ezért ebből még ne vonj le következtetést.`);
+  else if (taper) out.push(tsb >= 5 ? `Frissítés zajlik, és a frissességed (+${tsb}) már pozitív: jó úton vagy a versenyre.` : `Frissítés zajlik, a frissességnek (${tsb}) a verseny előtt pozitívba kell fordulnia. Ha a hét végére sem emelkedik, inkább hagyj ki egy edzést.`);
+  else if (light) out.push(tsb < -10 ? `Könnyített hét van, de még fáradt vagy (${tsb}). A hét végére jó lenne −10 fölé kerülni; ha nem sikerül, a következő kemény edzést könnyítsd.` : `Könnyített hét van, és a frissességed (${tsb}) emelkedik: pont ez a cél.`);
+  else out.push(tsb < -30 ? `Most nagyon fáradt vagy (${tsb}). Ha a következő edzések nehéznek tűnnek (4–5-ös nehézség), vagy a térd jelez, cserélj egy kemény edzést lazára.` : tsb < -10 ? `A frissességed (${tsb}) építő terhelést mutat, edzésidőszakban ez a normális.` : `Viszonylag friss vagy (${tsb > 0 ? '+' : ''}${tsb}), jó alkalom egy minőségi edzésre.`);
+  const kn = allItems().filter(i => { const d = eff(i); return d <= t && d > addDays(t, -7); }).map(i => kneeOf(entry(i.id))).reduce((m, v) => Math.max(m, v), 0);
+  if (kn >= 3) out.push(`Az elmúlt héten a térded ${kn}/5-öt jelzett${tsb < -15 ? ', és közben fáradt is vagy' : ''}: a következő futásnál inkább rövidíts vagy lassíts.`);
+  const ci = currentWeekIdx(), nx = weeks()[ci + 1];
+  if (nx && wk.het != null) {
+    const a = weekHours(wk.het).plan, b = weekHours(nx.het).plan;
+    if (a && b) out.push(`Jövő héten kb. ${hrs(b)} óra edzés jön (most ${hrs(a)})${b < a * 0.8 ? ', ez könnyebb hét, a frissességed emelkedni fog.' : b > a * 1.1 ? ', ez több terhelés, a fáradtság nőni fog.' : ', nagyjából ugyanannyi.'}`);
+  }
+  return out.map(x => `<p>${x}</p>`).join('');
 }
 function feelHTML() {
   const items = allItems().filter(i => !isRest(i));
