@@ -1,5 +1,5 @@
 'use strict';
-const APP_VERSION = '60';
+const APP_VERSION = '61';
 async function checkUpdate() {
   try { const v = (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.text())).trim(); if (v && v !== APP_VERSION && sessionStorage.getItem('reloadedFor') !== v) { sessionStorage.setItem('reloadedFor', v); location.reload(); } } catch (e) {}
 }
@@ -278,7 +278,7 @@ function itemHTML(i) {
       ${rest ? `<div class="extra">${renHTML(i)}${moveHTML(i)}</div>` : `<div class="extra">
         ${renHTML(i)}
         <div class="feel">Nehézség: ${feel}<span class="fh">1 könnyű · 5 nehéz</span></div>
-        <div class="feel knee">Térd: ${[1, 2, 3, 4, 5].map(n => `<button data-knee="${n}" class="${kneeOf(e) === n ? 'on' : ''}">${n}</button>`).join('')}<span class="fh">1 nem fáj · 5 nagyon fáj</span></div>
+        ${['Futás', 'Brick'].includes(i.sport) || kneeOf(e) ? `<div class="feel knee">Térd: ${[1, 2, 3, 4, 5].map(n => `<button data-knee="${n}" class="${kneeOf(e) === n ? 'on' : ''}">${n}</button>`).join('')}<span class="fh">1 nem fáj · 5 nagyon fáj</span></div>` : ''}
         ${moveHTML(i)}
         <textarea data-note="${i.id}" placeholder="Megjegyzés">${esc(e.m || '')}</textarea>
         ${i.extra ? `<button class="del" data-del="${i.id}">Edzés törlése</button>` : ''}
